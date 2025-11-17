@@ -8,7 +8,7 @@ app.get("/", (req, res) => {
   res.send("Acquire Intel Engine is running 🚀");
 });
 
-// 🔥 MAIN ANALYSIS ENDPOINT (this is what REQBIN is calling)
+// MAIN ENDPOINT (REQBIN WILL CALL THIS)
 app.post("/api/analyse", async (req, res) => {
   try {
     const { text } = req.body;
@@ -17,27 +17,20 @@ app.post("/api/analyse", async (req, res) => {
       return res.status(400).json({ error: "No text provided" });
     }
 
-    // TEMPORARY MOCK RESPONSE (we will later replace with real AI + scrapers)
-    const reply = `Received: "${text}". Engine analysis successful.`;
+    const reply = `Received: ${text}. Engine analysis successful.`; // temporary mock
 
     res.json({
       status: "ok",
       reply
     });
 
-  } catch (err) {
-    console.error("Engine Error:", err);
+  } catch (error) {
+    console.error("Engine Error:", error);
     res.status(500).json({ error: "Internal engine error" });
   }
 });
 
-// Temporary process route (optional)
-app.post("/process", (req, res) => {
-  res.json({ message: "Process route working", data: req.body });
-});
-
-// Render port
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Acquire Intel Engine running on port ${PORT}`);
 });
