@@ -1,36 +1,31 @@
 import express from "express";
+import pkg from "pg";
+const { Pool } = pkg;
 
 const app = express();
 app.use(express.json());
 
-// Health Check
-app.get("/", (req, res) => {
-  res.send("Acquire Intel Engine is running 🚀");
+// Create DB connection pool
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
 });
 
-// MAIN ENDPOINT (REQBIN WILL CALL THIS)
-app.post("/api/analyse", async (req, res) => {
+// Health check
+app.get("/", (req, res) => {
+  res.send("Acquire Intel Engine + Postgres DB connected 🚀");
+});
+
+// Test DB route
+app.get("/db-test", async (req, res) => {
   try {
-    const { text } = req.body;
-
-    if (!text) {
-      return res.status(400).json({ error: "No text provided" });
-    }
-
-    const reply = `Received: ${text}. Engine analysis successful.`; // temporary mock
-
-    res.json({
-      status: "ok",
-      reply
-    });
-
-  } catch (error) {
-    console.error("Engine Error:", error);
-    res.status(500).json({ error: "Internal engine error" });
+    const result = await pool.query("SELECT NOW()");
+    res.json({ success: true, time: result.rows[0].now });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "DB connection failed", details: err });
   }
 });
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Acquire Intel Engine running on port ${PORT}`);
-});
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, () => console.log(`Acquire Intel Engine running on port ${PORT}`));
