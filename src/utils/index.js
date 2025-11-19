@@ -1,3 +1,9 @@
-export * from "./utils/ingest.js";
-export * from "./utils/clean.js";
-export * from "./utils/models/models.js";
+// src/utils/index.js
+
+import * as utils from "./utils";
+import * as models from "./models";
+
+export {
+  utils,
+  models
+};
