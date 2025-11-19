@@ -4,12 +4,12 @@
 // ACQUIRE INTEL ENGINE — INGESTION CORE (PHASE 1 SKELETON)
 // ------------------------------------------------------
 
-// Ingest external feeds (EGI, CoStar, Rightmove, Realla, Distress, News)
+// Core ingestion placeholder — no external APIs yet, avoids errors
 export const ingestFeeds = async () => {
   try {
     console.log("🔄 Ingestion engine started...");
 
-    // Placeholder – this will expand as each feed is added
+    // Structured response for all feeds — currently empty placeholders
     const results = {
       egi: [],
       costar: [],
@@ -20,7 +20,6 @@ export const ingestFeeds = async () => {
       operators: []
     };
 
-    // Return empty structure for now (prevents errors)
     return {
       success: true,
       message: "Ingestion engine skeleton active",
@@ -29,6 +28,7 @@ export const ingestFeeds = async () => {
 
   } catch (err) {
     console.error("❌ Ingestion engine error:", err);
+
     return {
       success: false,
       error: "Ingestion engine failed"
