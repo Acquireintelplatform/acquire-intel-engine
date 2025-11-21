@@ -1,8 +1,15 @@
-import express from "express";
-import propertiesRouter from "./properties.js";
+/**
+ * /src/api/index.js
+ * Central API router. Loads all sub-routes.
+ */
 
+const express = require('express');
 const router = express.Router();
 
-router.use("/properties", propertiesRouter);
+// Properties route
+router.use('/properties', require('./properties'));
 
-export default router;
+// Scrape route
+router.use('/scrape', require('./scrape'));
+
+module.exports = router;
