@@ -4,7 +4,6 @@ import runDailyCompaniesHouseCheck from "../distress/dailyCompaniesHouse.js";
 
 const router = express.Router();
 
-// Trigger distress check manually (optional)
 router.get("/run", async (req, res) => {
   try {
     const result = await runDailyCompaniesHouseCheck();
