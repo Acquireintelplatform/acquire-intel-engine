@@ -3,7 +3,10 @@
  * Aggregates and runs all scrapers in sequence.
  */
 
-const egiScraper = require('./utils/egi'); // adjust when new scrapers are added
+// Placeholder scraper until real scrapers are added
+async function fakeScraper() {
+  return [{ message: "EGI scraper placeholder working" }];
+}
 
 /**
  * Runs all scrapers safely.
@@ -14,7 +17,7 @@ async function runAllScrapers() {
 
   // List all scraper functions here
   const scrapers = [
-    { name: 'EGI', fn: egiScraper }
+    { name: 'EGI', fn: fakeScraper }
   ];
 
   for (const scraper of scrapers) {
