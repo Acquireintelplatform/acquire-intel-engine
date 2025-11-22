@@ -1,14 +1,11 @@
-/**
- * /src/api/properties.js
- * Properties API routes
- */
+// src/api/scrape.js
+import express from "express";
 
-const express = require('express');
 const router = express.Router();
 
-// Example route
+// Example placeholder route
 router.get("/", (req, res) => {
-  res.json({ message: "Properties endpoint working" });
+  res.json({ message: "Scrape API OK" });
 });
 
-module.exports = router;
+export default router;
