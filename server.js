@@ -3,26 +3,57 @@ import cors from "cors";
 import dotenv from "dotenv";
 import cron from "node-cron";
 
-// Load environment variables
 dotenv.config();
-
-import distressRoutes from "./src/api/distress.js";
-import "./src/distress/dailyCompaniesHouse.js"; 
-// ⬆ This line activates the daily cron job automatically
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Basic health check
+// ========================
+// IMPORT API ROUTES
+// ========================
+import propertiesRoutes from "./src/api/properties.js";
+import scrapeRoutes from "./src/api/scrape.js";
+import distressRoutes from "./src/api/distress.js";
+
+app.use("/api/properties", propertiesRoutes);
+app.use("/api/scrape", scrapeRoutes);
+
+// ⭐ ADDING THE DISTRESS ENGINE API ROUTE
+app.use("/api/distress", distressRoutes);
+
+// ========================
+// DAILY CRON JOB (08:00 UK time, GMT or BST handled by Render)
+// ========================
+import runDailyCompaniesHouseCheck from "./src/distress/dailyCompaniesHouse.js";
+
+cron.schedule(
+  "0 8 * * *",
+  async () => {
+    console.log("⏳ Running daily Companies House distress scan (cron)...");
+    try {
+      await runDailyCompaniesHouseCheck();
+      console.log("✅ Daily distress scan completed");
+    } catch (err) {
+      console.error("❌ Error during distress cron job:", err.message);
+    }
+  },
+  {
+    timezone: "Europe/London",
+  }
+);
+
+// ========================
+// ROOT CHECK
+// ========================
 app.get("/", (req, res) => {
-  res.send("Backend is running");
+  res.send("Acquire Intel Engine backend is running.");
 });
 
-// Distress scan routes
-app.use("/distress", distressRoutes);
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// ========================
+// START SERVER
+// ========================
+const port = process.env.PORT || 3001;
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });
