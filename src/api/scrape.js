@@ -1,5 +1,6 @@
+// src/api/scrape.js
 import express from "express";
-import runScrape from "../services/scrape/scrapers.js";
+import runScrape from "../utils/scrapers.js";
 
 const router = express.Router();
 
