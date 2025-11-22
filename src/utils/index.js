@@ -1,9 +1,7 @@
 // src/utils/index.js
 
-import * as utils from "./utils";
-import * as models from "./models";
+const scraperUtils = require("./scrapers");
 
-export {
-  utils,
-  models
+module.exports = {
+  scraperUtils
 };
