@@ -1,6 +1,6 @@
 // src/distress/sicCodes.js
+// EXPORT AS DEFAULT – REQUIRED BY dailyCompaniesHouse.js
 
-// EXPORT AS DEFAULT — REQUIRED BY dailyCompaniesHouse.js
 export default [
   "56101", // Licensed restaurants
   "56102", // Unlicensed restaurants
@@ -11,9 +11,9 @@ export default [
   "56210", // Event catering
   "56290", // Other food service
   "85100", // Nurseries
-  "93110", // Gymnasiums
+  "93110", // Gyms
   "93130", // Fitness facilities
   "93290", // Leisure / entertainment
   "90040", // Arts facilities
-  "91020"  // Museums/attractions
+  "91020", // Museums / attractions
 ];
