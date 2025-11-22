@@ -6,7 +6,7 @@
 const express = require("express");
 const router = express.Router();
 
-// Properties routes
+// Properties routes (correct path)
 const propertiesRouter = require("./properties.js");
 router.use("/properties", propertiesRouter);
 
