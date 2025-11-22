@@ -1,15 +1,28 @@
-/**
- * /src/api/index.js
- * Central API router. Loads all sub-routes.
- */
+// src/api/index.js
+// Main API router
 
 const express = require('express');
 const router = express.Router();
 
-// Properties route
-router.use('/properties', require('./properties'));
+// Properties routes
+const propertiesRouter = require('./properties');
+router.use('/properties', propertiesRouter);
 
-// Scrape route
-router.use('/scrape', require('./scrape'));
+// Companies House service
+const { getCompany } = require("../services/companiesHouse");
+
+// Companies House API route
+router.get("/company/:number", async (req, res) => {
+  const number = req.params.number;
+
+  const result = await getCompany(number);
+
+  res.json(result);
+});
+
+// Default test route
+router.get("/", (req, res) => {
+  res.json({ message: "API root working" });
+});
 
 module.exports = router;
