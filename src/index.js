@@ -36,4 +36,12 @@ app.get("/db-test", async (req, res) => {
 });
 
 // Simple test route
-app.get("/test
+app.get("/test", (req, res) => {
+  res.json({ message: "Test endpoint OK" });
+});
+
+// Start server
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log(`Acquire Intel Engine running on port ${PORT}`);
+});
