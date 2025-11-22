@@ -1,4 +1,3 @@
-// src/api/scrape.js
 import express from "express";
 import runScrape from "../services/scrape/scrapers.js";
 
