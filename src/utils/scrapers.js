@@ -17,7 +17,7 @@ async function runAllScrapers() {
 
   // List all scraper functions here
   const scrapers = [
-    { name: 'EGI', fn: fakeScraper }
+    { name: "EGI", fn: fakeScraper }
   ];
 
   for (const scraper of scrapers) {
@@ -25,14 +25,16 @@ async function runAllScrapers() {
       const data = await scraper.fn();
       results.push({
         source: scraper.name,
+        data,
         success: true,
-        data
+        error: null,
       });
     } catch (err) {
       results.push({
         source: scraper.name,
+        data: null,
         success: false,
-        error: err.message || 'Unknown scraper error'
+        error: err.message,
       });
     }
   }
@@ -40,6 +42,5 @@ async function runAllScrapers() {
   return results;
 }
 
-module.exports = {
-  runAllScrapers
-};
+// ✅ THIS LINE FIXES THE ERROR
+export default runAllScrapers;
