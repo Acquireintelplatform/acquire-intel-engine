@@ -1,61 +1,59 @@
-import cron from "node-cron";
-import fs from "fs";
-import path from "path";
-import { fetchCompanyProfile, isRelevantSIC, detectDistressSignals } from "./helpers.js";
+import fetch from "node-fetch";
+import sicCodes from "./sicCodes.js";
+import { delay } from "./helpers.js";
 
 const COMPANIES_HOUSE_API_KEY = process.env.COMPANIES_HOUSE_API_KEY;
+const BASE_URL = "https://api.company-information.service.gov.uk";
 
-// Folder for saving daily results
-const RESULTS_DIR = path.resolve("distress_results");
-
-// Make sure the folder exists
-if (!fs.existsSync(RESULTS_DIR)) {
-  fs.mkdirSync(RESULTS_DIR, { recursive: true });
-}
-
-async function scanCompaniesHouse() {
-  console.log("🔍 Distress Engine: Daily scan started...");
-
-  // Example batch of known operator company numbers
-  // (We will replace these with auto-scraped lists later)
-  const COMPANY_NUMBERS = [
-    "00002515", // Tesco
-    "SC090302", // Nando’s example Scotland company
-    "05203559", // Pizza Hut example
-  ];
+// =======================================================
+// MAIN FUNCTION — this is what server.js imports
+// =======================================================
+async function runDailyCompaniesHouseCheck() {
+  console.log("🔍 Running daily Companies House distress scan...");
 
   const results = [];
 
-  for (const number of COMPANY_NUMBERS) {
-    const company = await fetchCompanyProfile(number, COMPANIES_HOUSE_API_KEY);
-    if (!company) continue;
+  for (const sic of sicCodes) {
+    console.log(`📌 Checking SIC: ${sic}`);
 
-    // Only track companies with relevant F&B or leisure SIC codes
-    if (!isRelevantSIC(company)) continue;
+    await delay(500);
 
-    const distress = detectDistressSignals(company);
-    if (distress) {
-      results.push({
-        companyNumber: number,
-        name: company.company_name,
-        distressSignals: distress,
-        lastUpdated: new Date().toISOString(),
+    const url = `${BASE_URL}/advanced-search/companies?sic_codes=${sic}&size=50`;
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Basic ${Buffer.from(COMPANIES_HOUSE_API_KEY + ":").toString("base64")}`,
+        },
       });
+
+      const data = await response.json();
+
+      if (data && data.items) {
+        data.items.forEach((company) => {
+          // Basic distress indicators
+          const distress = {
+            name: company.company_name,
+            number: company.company_number,
+            status: company.company_status,
+            sic_codes: company.sic_codes ?? [],
+            last_accounts: company.accounts?.next_due ?? null,
+            type: company.type,
+          };
+
+          results.push(distress);
+        });
+      }
+    } catch (err) {
+      console.error(`❌ Error fetching SIC ${sic}`, err.message);
     }
   }
 
-  // Save the output in a daily dated file
-  const filename = `distress_${new Date().toISOString().split("T")[0]}.json`;
-  const filepath = path.join(RESULTS_DIR, filename);
-
-  fs.writeFileSync(filepath, JSON.stringify(results, null, 2));
-
-  console.log(`✅ Distress scan complete. Saved to ${filepath}`);
+  console.log("✅ Companies House scan completed.");
+  return results;
 }
 
-// Runs every day at 6am (London time)
-cron.schedule("0 6 * * *", async () => {
-  await scanCompaniesHouse();
-});
-
-console.log("⏳ Distress Engine cron job loaded (runs daily at 6am)");
+// =======================================================
+// DEFAULT EXPORT (this was missing before)
+// =======================================================
+export default runDailyCompaniesHouseCheck;
