@@ -1,9 +1,14 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import axios from "axios";
+import cron from "node-cron";
 
+// Load environment variables
 dotenv.config();
+
+import distressRoutes from "./src/api/distress.js";
+import "./src/distress/dailyCompaniesHouse.js"; 
+// ⬆ This line activates the daily cron job automatically
 
 const app = express();
 app.use(cors());
@@ -14,10 +19,8 @@ app.get("/", (req, res) => {
   res.send("Backend is running");
 });
 
-// Example API route test
-app.get("/test", (req, res) => {
-  res.json({ status: "OK", message: "Test endpoint working" });
-});
+// Distress scan routes
+app.use("/distress", distressRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
