@@ -1,14 +1,13 @@
-// src/api/index.js
 import express from "express";
 
-import scrapeRouter from "./scrape.js";
-import propertiesRouter from "./properties.js";
-import distressRouter from "./distress.js";
+import propertiesRoutes from "./properties.js";
+import scrapeRoutes from "./scrape.js";
+import distressRoutes from "./distress.js";
 
 const router = express.Router();
 
-router.use("/scrape", scrapeRouter);
-router.use("/properties", propertiesRouter);
-router.use("/distress", distressRouter);
+router.use("/properties", propertiesRoutes);
+router.use("/scrape", scrapeRoutes);
+router.use("/distress", distressRoutes);
 
 export default router;
