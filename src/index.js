@@ -1,47 +1,36 @@
 /**
- * /src/index.js
- * Main server entry point
+ * /src/api/index.js
+ * Main API router
  */
 
-const express = require('express');
-const { Pool } = require('pg');
+const express = require("express");
+const router = express.Router();
 
-const app = express();
-app.use(express.json());
+// Properties routes
+const propertiesRouter = require("./properties");
+router.use("/properties", propertiesRouter);
 
-// Database connection
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
+// Companies House service
+const { getCompany } = require("../services/companiesHouse");
 
-// Mount API routes
-const apiRouter = require('./api');
-app.use('/api', apiRouter);
-
-// Health check
-app.get("/", (req, res) => {
-  res.send("Acquire Intel Engine + Postgres DB connected 🚀");
-});
-
-// DB test route
-app.get("/db-test", async (req, res) => {
+// Companies House API route
+router.get("/company/:number", async (req, res) => {
   try {
-    const result = await pool.query("SELECT NOW()");
-    res.json({ success: true, time: result.rows[0].now });
+    const number = req.params.number;
+    const result = await getCompany(number);
+    res.json(result);
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, error: "DB error" });
+    res.status(500).json({
+      success: false,
+      error: "Companies House lookup failed",
+      details: err.message
+    });
   }
 });
 
-// Simple test route
-app.get("/test", (req, res) => {
-  res.json({ message: "Test endpoint OK" });
+// Default test route
+router.get("/", (req, res) => {
+  res.json({ message: "API root working" });
 });
 
-// Start server
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Acquire Intel Engine running on port ${PORT}`);
-});
+module.exports = router;
