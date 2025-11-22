@@ -1,23 +1,31 @@
-// src/api/index.js
-// Main API router
+/**
+ * /src/api/index.js
+ * Main API router
+ */
 
-const express = require('express');
+const express = require("express");
 const router = express.Router();
 
 // Properties routes
-const propertiesRouter = require('./properties');
-router.use('/properties', propertiesRouter);
+const propertiesRouter = require("./properties.js");
+router.use("/properties", propertiesRouter);
 
 // Companies House service
-const { getCompany } = require("../services/companiesHouse");
+const { getCompany } = require("../services/companiesHouse.js");
 
 // Companies House API route
 router.get("/company/:number", async (req, res) => {
-  const number = req.params.number;
-
-  const result = await getCompany(number);
-
-  res.json(result);
+  try {
+    const number = req.params.number;
+    const result = await getCompany(number);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: "Companies House lookup failed",
+      details: err.message
+    });
+  }
 });
 
 // Default test route
