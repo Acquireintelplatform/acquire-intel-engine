@@ -1,19 +1,14 @@
-// src/api/properties.js
+/**
+ * /src/api/properties.js
+ * Properties API routes
+ */
 
-import express from "express";
-import { getProperties } from "../services/properties.js";
-
+const express = require('express');
 const router = express.Router();
 
-// GET /api/properties
-router.get("/", async (req, res) => {
-  try {
-    const data = await getProperties();
-    res.json({ success: true, data });
-  } catch (err) {
-    console.error("Error in GET /api/properties:", err);
-    res.status(500).json({ success: false, error: "Server error" });
-  }
+// Example route
+router.get("/", (req, res) => {
+  res.json({ message: "Properties endpoint working" });
 });
 
-export default router;
+module.exports = router;
