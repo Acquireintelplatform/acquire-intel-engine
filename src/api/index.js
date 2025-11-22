@@ -1,24 +1,14 @@
-/**
- * Root server file
- * /src/index.js
- */
+// src/api/index.js
+import express from "express";
 
-const express = require("express");
-const app = express();
+import scrapeRouter from "./scrape.js";
+import propertiesRouter from "./properties.js";
+import distressRouter from "./distress.js";
 
-app.use(express.json());
+const router = express.Router();
 
-// Import main API router
-const apiRouter = require("./api/index.js");
-app.use("/api", apiRouter);
+router.use("/scrape", scrapeRouter);
+router.use("/properties", propertiesRouter);
+router.use("/distress", distressRouter);
 
-// Root test route
-app.get("/", (req, res) => {
-  res.send("Acquire Intel Engine + Postgres DB connected 🚀");
-});
-
-// Start server
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Acquire Intel Engine running on port ${PORT}`);
-});
+export default router;
