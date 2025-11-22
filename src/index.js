@@ -1,24 +1,36 @@
 /**
- * Root server file
- * /src/index.js
+ * /src/api/index.js
+ * Main API router
  */
 
 const express = require("express");
-const app = express();
+const router = express.Router();
 
-app.use(express.json());
+// Properties routes
+const propertiesRouter = require("./properties");
+router.use("/properties", propertiesRouter);
 
-// Import main API router
-const apiRouter = require("./api/index");
-app.use("/api", apiRouter);
+// Companies House service
+const { getCompany } = require("../services/companiesHouse");
 
-// Root test route
-app.get("/", (req, res) => {
-  res.send("Acquire Intel Engine + Postgres DB connected 🚀");
+// Companies House API route
+router.get("/company/:number", async (req, res) => {
+  try {
+    const number = req.params.number;
+    const result = await getCompany(number);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: "Companies House lookup failed",
+      details: err.message
+    });
+  }
 });
 
-// Start server
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Acquire Intel Engine running on port ${PORT}`);
+// Default test route
+router.get("/", (req, res) => {
+  res.json({ message: "API root working" });
 });
+
+module.exports = router;
