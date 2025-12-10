@@ -1,0 +1,66 @@
+/* src/layout/sidebar.css — premium uniform bubble tabs */
+:root{
+  --ai-bg:#071a23;
+  --ai-panel:#0b2230;
+  --ai-accent:#19f5d1;
+  --ai-text:#d6f3f0;
+  --ai-muted:#8fb0ba;
+  --ai-border:rgba(25,245,209,.25);
+  --ai-border-strong:rgba(25,245,209,.35);
+  --ai-glow:rgba(25,245,209,.14);
+  --ai-sidebar-w:280px;
+}
+
+.ai-shell{
+  display:grid;
+  grid-template-columns: var(--ai-sidebar-w) 1fr;
+  gap:24px;
+  min-height:100vh;
+  background: var(--ai-bg);
+}
+
+.ai-sidebar{
+  position:sticky; top:0; height:100vh;
+  padding:16px 10px;
+  border-right:1px solid var(--ai-border);
+  background: linear-gradient(180deg,#061b28,#061b28fa);
+  overflow:auto;
+}
+
+.ai-main{ padding:24px; min-width:0; }
+
+.ai-brand{
+  color:var(--ai-accent);
+  font-weight:800; letter-spacing:.3px;
+  margin:4px 8px 12px 8px;
+}
+
+.ai-nav{ padding:4px 6px 24px; }
+.ai-group{ margin:14px 0 12px; }
+.ai-group-title{
+  color:var(--ai-muted);
+  font-size:12px; margin:8px 8px 8px;
+  text-transform:uppercase;
+}
+.ai-group-items{ display:flex; flex-direction:column; gap:10px; padding:0 6px; }
+
+/* UNIFORM BUBBLE TABS (all items) */
+.ai-link{
+  display:block;
+  padding:12px 14px;
+  border-radius:14px;
+  text-decoration:none;
+  color:var(--ai-text);
+  background: rgba(25,245,209,.06);
+  border:1px solid var(--ai-border);
+  box-shadow: 0 10px 30px var(--ai-glow), inset 0 0 0 1px rgba(25,245,209,.18);
+  transition: filter .15s ease, background .15s ease, outline-color .15s ease;
+}
+.ai-link:hover{ filter:brightness(1.06); }
+.ai-link.is-active{
+  background: linear-gradient(135deg, rgba(25,245,209,.22), rgba(25,245,209,.08));
+  outline:1px solid var(--ai-border-strong);
+  color:#fff;
+}
+
+.ai-sys{ margin-top:16px; color:var(--ai-muted); padding:8px 12px; }

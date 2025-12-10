@@ -1,0 +1,58 @@
+/* src/components/PageWrapper.css — page header + panels + forms + table */
+:root{
+  --ai-border: rgba(25,245,209,.25);
+  --ai-glow: rgba(25,245,209,.14);
+  --ai-text: #e9fbf8;
+  --ai-muted:#9bc0c9;
+}
+
+.ai-card{
+  background: linear-gradient(180deg, rgba(10,26,47,.85), rgba(10,26,47,.9));
+  border:1px solid var(--ai-border);
+  border-radius:16px;
+  box-shadow: 0 0 0 1px var(--ai-border) inset, 0 14px 40px var(--ai-glow);
+  padding:18px; position: relative; overflow: hidden;
+}
+.ai-card-head{ padding-bottom:12px; margin-bottom:14px; border-bottom:1px solid var(--ai-border); }
+.ai-h1{ margin:0; font-size:28px; font-weight:800; letter-spacing:.2px; color: var(--ai-text); text-shadow: 0 0 30px var(--ai-glow); }
+.ai-sub{ margin:6px 0 0; color: var(--ai-muted); font-size:14px; }
+.ai-card-body{ padding-top:4px; }
+
+.ai-panel{
+  background: linear-gradient(180deg, rgba(7,22,34,.75), rgba(7,22,34,.85));
+  border:1px solid var(--ai-border);
+  border-radius:14px; box-shadow: 0 10px 30px var(--ai-glow);
+  padding:16px; position: relative; overflow: hidden;
+}
+.ai-panel + .ai-panel{ margin-top:16px; }
+
+.ai-form{ display:grid; gap:12px; }
+.ai-row-2{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+.ai-field{ display:grid; gap:6px; }
+.ai-field label{ color: var(--ai-muted); font-size:14px; }
+
+.ai-input, .ai-select, .ai-textarea, input[type="file"]{
+  width:100%; background:#061528; color:#fff;
+  border-radius:10px; padding:10px 12px; border:1px solid var(--ai-border);
+}
+.ai-textarea{ min-height:80px; resize:vertical; }
+
+.ai-btn{
+  background:#19f5d1; color:#001a16; border:none; padding:12px 16px;
+  font-weight:800; border-radius:12px; cursor:pointer;
+  box-shadow: 0 0 0 1px rgba(25,245,209,.35) inset, 0 0 24px rgba(25,245,209,.16);
+}
+
+/* Table */
+.ai-table-wrap{ overflow:auto; }
+.ai-table{
+  width:100%; border-collapse: collapse; font-size:14px;
+}
+.ai-table th, .ai-table td{
+  border:1px solid var(--ai-border); padding:10px; text-align:left;
+}
+.ai-table th{ color:var(--ai-text); background:rgba(25,245,209,.06); }
+.ai-table tr:nth-child(even){ background:rgba(255,255,255,.02); }
+
+/* Make sure page never horizontally scrolls due to glows */
+.ai-main { overflow-x: hidden; }

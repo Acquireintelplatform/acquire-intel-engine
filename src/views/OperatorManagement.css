@@ -1,0 +1,77 @@
+.op-container {
+  padding: 30px;
+  color: white;
+  background: #031321;
+  min-height: 100vh;
+}
+
+.op-title {
+  font-size: 34px;
+  margin-bottom: 20px;
+  color: #2ef2d0;
+}
+
+.op-add-btn {
+  background: #2ef2d0;
+  color: #031321;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: none;
+  font-weight: bold;
+  cursor: pointer;
+  margin-bottom: 20px;
+}
+
+.op-table-wrapper {
+  background: #06202a;
+  padding: 20px;
+  border-radius: 12px;
+  max-height: 70vh;
+  overflow-y: auto;
+  box-shadow: 0 0 12px rgba(46, 242, 208, 0.15);
+}
+
+.op-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.op-table th {
+  text-align: left;
+  padding: 10px;
+  border-bottom: 2px solid #2ef2d0;
+}
+
+.op-table td {
+  padding: 10px;
+  border-bottom: 1px solid #093245;
+}
+
+.op-link {
+  color: #2ef2d0;
+  text-decoration: underline;
+}
+
+.op-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.op-edit-btn,
+.op-delete-btn {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.op-edit-btn {
+  background: #2ef2d0;
+  color: #031321;
+}
+
+.op-delete-btn {
+  background: #b81b1b;
+  color: white;
+}

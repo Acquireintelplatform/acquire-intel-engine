@@ -1,0 +1,23 @@
+.ai-button {
+  padding: 14px 28px;
+  background: #2ef2d0;
+  color: #031321;
+  border: none;
+  border-radius: 10px;
+  font-weight: 700;
+  font-size: 16px;
+  cursor: pointer;
+  transition: 0.2s ease;
+  box-shadow: 0 0 12px rgba(46, 242, 208, 0.28);
+}
+
+.ai-button:hover {
+  background: #22d0b4;
+  box-shadow: 0 0 18px rgba(46, 242, 208, 0.4);
+}
+
+.ai-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+}

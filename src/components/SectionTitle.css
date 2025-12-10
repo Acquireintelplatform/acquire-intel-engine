@@ -1,0 +1,8 @@
+.section-title {
+  font-size: 32px;
+  font-weight: 700;
+  color: #2ef2d0;
+  margin-bottom: 22px;
+  text-shadow: 0 0 12px rgba(46, 242, 208, 0.4);
+  letter-spacing: 0.5px;
+}

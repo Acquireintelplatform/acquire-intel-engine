@@ -1,0 +1,44 @@
+/* LAYOUT CONTAINER */
+.layout-container {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  overflow: hidden !important; /* No scroll inside layout */
+  background: #031321;
+}
+
+/* SIDEBAR FIXED */
+.layout-sidebar {
+  width: 280px;
+  min-width: 280px;
+  height: 100vh;
+  position: fixed;
+  left: 0;
+  top: 0;
+  background: #041b2d;
+  padding-top: 30px;
+  overflow: hidden !important;
+  box-shadow: 4px 0 15px rgba(0, 0, 0, 0.35);
+}
+
+/* MAIN CONTENT = SCROLL ON BODY */
+.layout-content {
+  margin-left: 280px;
+  width: calc(100% - 280px);
+  min-height: 100vh;
+  padding: 40px;
+  padding-bottom: 100px;
+  overflow: visible !important;
+  position: relative;
+}
+
+/* REMOVE ANY CHILD SCROLLING */
+.layout-content * {
+  overflow: visible !important;
+}
+
+/* NO HORIZONTAL SCROLL ANYWHERE */
+.layout-content,
+.layout-container {
+  overflow-x: hidden !important;
+}

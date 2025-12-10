@@ -1,0 +1,151 @@
+/* PAGE WRAPPER */
+.operator-management-page {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 20px 10px;
+  color: #ffffff;
+}
+
+/* MAIN CARD */
+.operator-management-card {
+  background: #06202a;
+  padding: 28px;
+  border-radius: 14px;
+  margin-bottom: 30px;
+  box-shadow: 0 0 12px rgba(46, 242, 208, 0.12);
+}
+
+/* TITLES */
+.page-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: #2ef2d0;
+  margin-bottom: 20px;
+}
+
+/* FORM GRID */
+.operator-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 22px;
+}
+
+/* FORM FIELDS */
+.form-label {
+  display: flex;
+  flex-direction: column;
+  font-size: 14px;
+  color: #9fe8de;
+}
+
+.form-input,
+.form-textarea {
+  margin-top: 6px;
+  padding: 12px;
+  font-size: 15px;
+  border-radius: 10px;
+  border: none;
+  outline: none;
+  background: #0b2d38;
+  color: white;
+}
+
+.form-input::placeholder,
+.form-textarea::placeholder {
+  color: #8bb3b0;
+}
+
+/* TEXTAREA SPECIFIC */
+.form-textarea {
+  min-height: 100px;
+  resize: vertical;
+}
+
+/* FULL WIDTH ELEMENTS */
+.form-label:nth-child(4),
+.primary-button {
+  grid-column: 1 / 3;
+}
+
+/* BUTTON */
+.primary-button {
+  padding: 14px 22px;
+  background: #2ef2d0;
+  color: #031321;
+  font-weight: 700;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: 0.2s;
+  border: none;
+}
+
+.primary-button:hover {
+  background: #22d0b4;
+}
+
+/* STATUS MESSAGES */
+.status-message {
+  grid-column: 1 / 3;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  margin-top: -5px;
+}
+
+.status-message.error {
+  background: rgba(255, 70, 70, 0.2);
+  color: #ff7070;
+}
+
+.status-message.success {
+  background: rgba(46, 242, 208, 0.18);
+  color: #2ef2d0;
+}
+
+/* EXISTING OPERATORS LIST */
+.operator-list-card {
+  background: #06202a;
+  padding: 28px;
+  border-radius: 14px;
+  box-shadow: 0 0 12px rgba(46, 242, 208, 0.12);
+}
+
+.section-title {
+  font-size: 22px;
+  color: #2ef2d0;
+  margin-bottom: 18px;
+}
+
+.operator-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.operator-list-item {
+  padding: 14px;
+  background: #0b2d38;
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+
+.operator-name {
+  font-size: 18px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.operator-meta {
+  color: #96c7c3;
+  font-size: 14px;
+  margin-top: 4px;
+}
+
+.operator-link {
+  color: #2ef2d0;
+  text-decoration: none;
+}
+
+.operator-link:hover {
+  text-decoration: underline;
+}
