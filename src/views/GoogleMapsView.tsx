@@ -32,7 +32,7 @@ const CATEGORY_COLOR: Record<CategoryKey, string> = {
   retail:         "#60A5FA",
   driveThru:      "#A78BFA",
   shoppingMalls:  "#F472B6",
-  newProperties:  "#2FFFD1",
+  newProperties:  "#2FFFD1", // brand teal
 };
 
 /* ==== Demo data (replace with API later) ================================== */
@@ -106,6 +106,7 @@ function svgPin(color: string, label?: string): google.maps.Icon {
 export default function GoogleMapsView(): JSX.Element {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const panoRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const [err, setErr] = useState("");
   const [selected, setSelected] = useState<Record<CategoryKey, boolean>>({
@@ -129,6 +130,7 @@ export default function GoogleMapsView(): JSX.Element {
     let infowindow: google.maps.InfoWindow | null = null;
     let panorama: google.maps.StreetViewPanorama | null = null;
     let svService: google.maps.StreetViewService | null = null;
+    let autocomplete: google.maps.places.Autocomplete | null = null;
 
     loadGoogle(GOOGLE_KEY)
       .then((g) => {
@@ -150,11 +152,28 @@ export default function GoogleMapsView(): JSX.Element {
           panControl: false,
           fullscreenControl: true,
           motionTracking: false,
-          visible: false, // only show after a pin click with coverage
+          visible: false,
         });
 
         svService = new g.maps.StreetViewService();
         infowindow = new g.maps.InfoWindow();
+
+        // Places Autocomplete
+        if (searchInputRef.current) {
+          autocomplete = new g.maps.places.Autocomplete(searchInputRef.current, {
+            fields: ["geometry", "name", "formatted_address"],
+            types: ["establishment", "geocode"],
+          });
+          autocomplete.addListener("place_changed", () => {
+            const place = autocomplete!.getPlace();
+            const loc = place.geometry?.location;
+            if (!loc || !map) return;
+            const latLng = { lat: loc.lat(), lng: loc.lng() };
+            map.panTo(latLng);
+            map.setZoom(16);
+            openStreetViewAt(latLng);
+          });
+        }
 
         function openStreetViewAt(latLng: google.maps.LatLngLiteral) {
           if (!svService || !panorama) return;
@@ -162,9 +181,9 @@ export default function GoogleMapsView(): JSX.Element {
             if (status === g.maps.StreetViewStatus.OK && data && data.location) {
               panorama!.setPano(data.location.pano);
               panorama!.setPov({ heading: 0, pitch: 0 });
-              panorama!.setVisible(true); // show panel
+              panorama!.setVisible(true);
             } else {
-              panorama!.setVisible(false); // hide if no coverage
+              panorama!.setVisible(false);
             }
           });
         }
@@ -201,7 +220,38 @@ export default function GoogleMapsView(): JSX.Element {
 
         draw();
 
+        // Add Marker button handler
+        function addMarkerAtCenter() {
+          if (!map) return;
+          const pos = map.getCenter();
+          if (!pos) return;
+          const latLng = { lat: pos.lat(), lng: pos.lng() };
+          const temp = new g.maps.Marker({
+            position: latLng,
+            title: "Dropped pin",
+            icon: svgPin(CATEGORY_COLOR.newProperties),
+            map,
+            draggable: true, // so you can refine spot
+          });
+          temp.addListener("click", () => {
+            infowindow!.setContent(
+              `<div style="min-width:220px">
+                 <div style="font-weight:700">Dropped pin</div>
+                 <div style="opacity:.8">Drag to adjust. Category: New properties</div>
+               </div>`
+            );
+            infowindow!.open({ map: map!, anchor: temp });
+            openStreetViewAt(latLng);
+          });
+          markers.push(temp);
+        }
+
+        // Wire button click
+        const btn = document.getElementById("add-marker-btn");
+        btn?.addEventListener("click", addMarkerAtCenter);
+
         return () => {
+          btn?.removeEventListener("click", addMarkerAtCenter);
           markers.forEach(m => m.setMap(null));
           markers = [];
           infowindow?.close();
@@ -210,7 +260,7 @@ export default function GoogleMapsView(): JSX.Element {
       })
       .catch((e) => setErr(e.message || String(e)));
 
-    return () => { map = null; };
+    return () => { /* unmount */ };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(selected)]);
 
@@ -240,6 +290,25 @@ export default function GoogleMapsView(): JSX.Element {
           {err} — check <code>VITE_GOOGLE_MAPS_API_KEY</code> on Render.
         </div>
       )}
+
+      {/* Search + Add Marker */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <input
+          ref={searchInputRef}
+          placeholder="Search address, store, postcode…"
+          style={{
+            flex: 1,
+            height: 40,
+            borderRadius: 16,
+            padding: "0 14px",
+            border: "1px solid rgba(255,255,255,0.12)",
+            background: "rgba(255,255,255,0.05)",
+            color: "#E7FEF9",
+            outline: "none",
+          }}
+        />
+        <button id="add-marker-btn" className="brand-btn">Add marker</button>
+      </div>
 
       {/* Legend / Filters */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginBottom: 12 }}>
