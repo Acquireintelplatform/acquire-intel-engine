@@ -1,7 +1,7 @@
 // src/views/RequirementsView.tsx
 import React, { useEffect, useMemo, useState } from "react";
 
-/* API base (Render + local) */
+/* API base */
 const API_BASE: string =
   (import.meta as any).env?.VITE_API_URL ||
   (import.meta as any).env?.VITE_API_BASE ||
@@ -61,8 +61,8 @@ export default function RequirementsView(): JSX.Element {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingLabel, setEditingLabel] = useState<string>("");
 
-  function inform(s: string) { setMsg(s); setTimeout(() => setMsg(""), 1800); }
-  function warn(s: string) { setErr(s); setTimeout(() => setErr(""), 2800); }
+  function inform(s: string) { setMsg(s); setTimeout(() => setMsg(""), 1600); }
+  function warn(s: string) { setErr(s); setTimeout(() => setErr(""), 2600); }
 
   async function refresh() {
     try {
@@ -136,9 +136,10 @@ export default function RequirementsView(): JSX.Element {
     } catch (e: any) { setCsvOk(false); warn(e.message || "CSV upload failed"); }
   }
 
-  /* Small, consistent button style */
-  const btn = "px-3 py-1.5 rounded-md text-sm font-medium";
-  const btnEm = `${btn}`;
+  /* Premium-feel button styles */
+  const btnBase = "inline-flex items-center justify-center rounded-lg text-sm font-semibold transition shadow-sm";
+  const btnPrimary = `${btnBase} px-3 py-1.5 hover:opacity-90 active:opacity-80`;
+  const btnGhost = `${btnBase} px-3 py-1.5 border hover:bg-white/5`;
 
   return (
     <div className="space-y-6">
@@ -146,15 +147,15 @@ export default function RequirementsView(): JSX.Element {
       <section className="rounded-2xl border p-5 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Upload Requirements (PDF or CSV)</h2>
-          {csvOk && <span className="text-green-500 text-sm">✅ CSV uploaded</span>}
+          {csvOk && <span className="text-green-500 text-xs">✅ CSV uploaded</span>}
         </div>
-        <div className="flex flex-wrap gap-3 items-center">
+        <div className="flex flex-wrap items-center gap-3">
           <input
             type="file"
             className="text-sm"
             onChange={e => { const f = e.target.files?.[0]; if (f) onCsv(f); }}
           />
-          <button type="button" className={btnEm} style={{ background: "#2fffd1", color: "#0b1220" }}>
+          <button type="button" className={btnPrimary} style={{ background: "#2fffd1", color: "#0b1220" }}>
             Upload &amp; Process
           </button>
         </div>
@@ -198,11 +199,11 @@ export default function RequirementsView(): JSX.Element {
               value={form.notes ?? ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
           </div>
           <div className="md:col-span-4 flex flex-wrap gap-2">
-            <button type="submit" className={btnEm} style={{ background: "#2fffd1", color: "#0b1220" }}>
+            <button type="submit" className={btnPrimary} style={{ background: "#2fffd1", color: "#0b1220" }}>
               {editingId != null ? "Update Requirement" : "Save Requirement"}
             </button>
             {editingId != null && (
-              <button type="button" className={`${btn} border`} onClick={() => { setEditingId(null); setEditingLabel(""); setForm(empty); }}>
+              <button type="button" className={btnGhost} onClick={() => { setEditingId(null); setEditingLabel(""); setForm(empty); }}>
                 Cancel Edit
               </button>
             )}
@@ -214,7 +215,7 @@ export default function RequirementsView(): JSX.Element {
       <section className="rounded-2xl border p-5 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Recent Manual Entries</h2>
-          <button type="button" className={btn} style={{ background: "#2fffd1", color: "#0b1220" }} onClick={refresh}>
+          <button type="button" className={btnPrimary} style={{ background: "#2fffd1", color: "#0b1220" }} onClick={refresh}>
             Refresh
           </button>
         </div>
@@ -228,7 +229,7 @@ export default function RequirementsView(): JSX.Element {
                 <th className="p-3 border-b w-56">Name</th>
                 <th className="p-3 border-b">Preferred Locations</th>
                 <th className="p-3 border-b w-64">Notes</th>
-                <th className="p-3 border-b w-40">Action</th>
+                <th className="p-3 border-b w-44">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -244,11 +245,24 @@ export default function RequirementsView(): JSX.Element {
                   <td className="p-3 border-b">
                     <div className="whitespace-pre-wrap break-words max-w-xs md:max-w-sm">{r.notes ?? "—"}</div>
                   </td>
-                  <td className="p-3 border-b">
-                    <div className="flex gap-2">
-                      <button type="button" className={`${btn} border`} onClick={() => onEdit(r, i)}>Edit</button>
+                  <td className="p-3 border-b whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className={btnGhost}
+                        onClick={() => onEdit(r, i)}
+                        title="Edit"
+                      >
+                        Edit
+                      </button>
                       {r.id != null && (
-                        <button type="button" className={btn} style={{ background: "#2fffd1", color: "#0b1220" }} onClick={() => onDelete(r.id!)}>
+                        <button
+                          type="button"
+                          className={btnPrimary}
+                          style={{ background: "#2fffd1", color: "#0b1220" }}
+                          onClick={() => onDelete(r.id!)}
+                          title="Delete"
+                        >
                           Delete
                         </button>
                       )}
