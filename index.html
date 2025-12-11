@@ -7,7 +7,6 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1"
     />
     <title>Acquire Intel Engine</title>
-    <!-- Brand-wide pill styles -->
     <link rel="stylesheet" href="/src/brand.css" />
   </head>
   <body>
@@ -15,58 +14,49 @@
 
     <script type="module" src="/src/main.tsx"></script>
 
-    <!--
-      Global enhancer:
-      - Turns every <button> into a sidebar-style pill (teal outline + glow).
-      - Auto-detects "primary" actions (submit buttons, or text like Save/Update/Delete/Upload/Process/Create/Apply/Run/Sync)
-        and sets them to the filled teal pill (Option A).
-      - Uses a MutationObserver so buttons added later (route changes) are styled too.
-    -->
     <script>
       (function () {
+        /* --- Redirect old System Health path to Scraper Status --- */
+        const redirects = {
+          "/health": "/scraper-status",
+          "/system-health": "/scraper-status",
+        };
+        const here = location.pathname.replace(/\/+$/, "");
+        if (redirects[here]) {
+          location.replace(redirects[here]);
+          return; // stop styling until after redirect
+        }
+
+        /* --- Global button styling to brand pills --- */
         const PRIMARY_REGEX = /(save|update|delete|create|add|apply|submit|run|upload|process|sync|confirm)/i;
 
         function styleButton(btn) {
           if (!(btn instanceof HTMLButtonElement)) return;
-          if (!btn.classList.contains('brand-btn')) {
-            btn.classList.add('brand-btn');
-          }
+          if (!btn.classList.contains('brand-btn')) btn.classList.add('brand-btn');
 
-          // Decide variant
           const label = (btn.textContent || '').trim();
           const isSubmit = (btn.getAttribute('type') || '').toLowerCase() === 'submit';
           const looksPrimary = isSubmit || PRIMARY_REGEX.test(label);
 
-          if (looksPrimary) {
-            btn.setAttribute('data-variant', 'primary');
-          } else {
-            btn.removeAttribute('data-variant');
-          }
+          // We keep uniform outline everywhere; leave attribute off.
+          if (looksPrimary) btn.removeAttribute('data-variant');
         }
 
         function scan(root) {
-          const buttons = root.querySelectorAll
-            ? root.querySelectorAll('button')
-            : [];
-          buttons.forEach(styleButton);
+          root.querySelectorAll?.('button').forEach(styleButton);
         }
 
-        // Initial run
         scan(document);
-
-        // Observe future DOM changes (SPA route swaps etc.)
-        const obs = new MutationObserver(mutations => {
-          for (const m of mutations) {
+        const obs = new MutationObserver(muts => {
+          for (const m of muts) {
             m.addedNodes.forEach(node => {
-              if (node.nodeType !== 1) return; // element
+              if (node.nodeType !== 1) return;
               if (node.tagName === 'BUTTON') styleButton(node);
               scan(node);
             });
           }
         });
         obs.observe(document.documentElement, { childList: true, subtree: true });
-
-        // Re-style on page show (e.g., BFCache)
         window.addEventListener('pageshow', () => scan(document));
       })();
     </script>
