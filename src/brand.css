@@ -22,15 +22,9 @@
   color: #E7FEF9;
   border: 1px solid rgba(47,255,209,0.35);
   box-shadow: 0 0 0 1px rgba(47,255,209,0.22) inset, var(--glow);
-  transition:
-    transform .06s ease,
-    opacity .15s ease,
-    box-shadow .15s ease,
-    background .15s ease,
-    color .15s ease;
+  transition: transform .06s ease, opacity .15s ease, box-shadow .15s ease, background .15s ease, color .15s ease;
   width: auto !important;
 }
-
 .brand-btn:hover { opacity: .95; }
 .brand-btn:active { transform: translateY(1px); }
 
@@ -41,14 +35,20 @@
   border: 1px solid rgba(255,255,255,0.18);
   box-shadow: 0 0 0 1px rgba(47,255,209,0.35) inset, var(--glow);
 }
-
-.brand-btn[disabled] {
-  opacity: .6;
-  cursor: not-allowed;
-}
+.brand-btn[disabled] { opacity: .6; cursor: not-allowed; }
 
 /* Keep inputs and file pickers untouched */
 input[type="file"] { all: revert; }
 
-/* HIDE duplicate white page titles injected by old wrappers */
+/* HIDE legacy white page titles injected by old wrappers */
 main > h1:first-of-type { display: none !important; }
+
+/* Premium teal title (use on section headers) */
+.brand-title {
+  color: var(--teal);
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: .2px;
+  text-shadow: 0 0 10px rgba(47,255,209,.30), 0 0 20px rgba(47,255,209,.18);
+  margin: 0 0 8px 0;
+}
