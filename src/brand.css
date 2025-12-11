@@ -1,0 +1,51 @@
+/* src/brand.css */
+/* Brand teal + glow */
+:root {
+  --teal: #2FFFD1;
+  --pill-radius: 16px;
+  --glow: 0 1px 0 rgba(0,0,0,.25), 0 0 10px rgba(47,255,209,.20), 0 0 24px rgba(47,255,209,.14);
+}
+
+/* Base pill for all app buttons */
+.brand-btn {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: var(--pill-radius);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: .2px;
+  user-select: none;
+  background: transparent;
+  color: #E7FEF9;
+  border: 1px solid rgba(47,255,209,0.35);
+  box-shadow: 0 0 0 1px rgba(47,255,209,0.22) inset, var(--glow);
+  transition:
+    transform .06s ease,
+    opacity .15s ease,
+    box-shadow .15s ease,
+    background .15s ease,
+    color .15s ease;
+  width: auto !important;
+}
+
+.brand-btn:hover { opacity: .95; }
+.brand-btn:active { transform: translateY(1px); }
+
+/* Filled variant = primary actions (Option A) */
+.brand-btn[data-variant="primary"] {
+  background: var(--teal);
+  color: #0b1220;
+  border: 1px solid rgba(255,255,255,0.18);
+  box-shadow: 0 0 0 1px rgba(47,255,209,0.35) inset, var(--glow);
+}
+
+.brand-btn[disabled] {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+/* Keep inputs and file pickers untouched */
+input[type="file"] { all: revert; }
