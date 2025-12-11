@@ -1,13 +1,14 @@
 // src/views/RequirementsView.tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { PillButton, SectionCard, ButtonRow } from "../components/BrandUI";
 
+/* API base */
 const API_BASE: string =
   (import.meta as any).env?.VITE_API_URL ||
   (import.meta as any).env?.VITE_API_BASE ||
   (import.meta as any).env?.VITE_API_BASE_URL ||
   "https://acquire-intel-api.onrender.com";
 
+/* Types */
 type Row = {
   id?: number;
   operatorId?: number | null;
@@ -17,23 +18,34 @@ type Row = {
   createdAt?: string;
 };
 
+/* Helpers */
 function toArray(v: any): string[] {
   if (Array.isArray(v)) return v.filter(Boolean);
   if (!v) return [];
   if (typeof v === "string") return v.split(/[,;|]/).map(s => s.trim()).filter(Boolean);
   return [String(v)];
 }
+
 async function get<T>(p: string): Promise<T> {
-  const r = await fetch(`${API_BASE}${p}`); if (!r.ok) throw new Error(`${r.status} ${p}`); return r.json();
+  const r = await fetch(`${API_BASE}${p}`);
+  if (!r.ok) throw new Error(`${r.status} ${p}`);
+  return r.json();
 }
 async function send<T>(p: string, m: "POST" | "PUT", b: any): Promise<T> {
-  const r = await fetch(`${API_BASE}${p}`, { method: m, headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) });
-  if (!r.ok) throw new Error(`${r.status} ${p}`); return r.json();
+  const r = await fetch(`${API_BASE}${p}`, {
+    method: m, headers: { "Content-Type": "application/json" }, body: JSON.stringify(b),
+  });
+  if (!r.ok) throw new Error(`${r.status} ${p}`);
+  return r.json();
 }
 async function tryPutBoth(id: number, body: any): Promise<Row> {
-  const a = await fetch(`${API_BASE}/api/operatorRequirements/manual/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const a = await fetch(`${API_BASE}/api/operatorRequirements/manual/${id}`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
   if (a.ok) return a.json();
-  const b = await fetch(`${API_BASE}/api/operatorRequirements/${id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const b = await fetch(`${API_BASE}/api/operatorRequirements/${id}`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
   if (b.ok) return b.json();
   throw new Error("PUT failed");
 }
@@ -41,6 +53,7 @@ async function tryPutBoth(id: number, body: any): Promise<Row> {
 export default function RequirementsView(): JSX.Element {
   const [rows, setRows] = useState<Row[]>([]);
   const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [csvOk, setCsvOk] = useState(false);
+
   const empty: Row = { operatorId: 1, title: "", notes: "", preferredLocations: [] };
   const [form, setForm] = useState<Row>(empty);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -52,27 +65,43 @@ export default function RequirementsView(): JSX.Element {
   async function refresh() {
     try {
       const data = await get<Row[]>("/api/operatorRequirements/manual");
-      setRows((Array.isArray(data) ? data : []).map(r => ({ ...r, preferredLocations: toArray(r.preferredLocations) })));
+      setRows((Array.isArray(data) ? data : []).map(r => ({
+        ...r, preferredLocations: toArray(r.preferredLocations),
+      })));
     } catch (e: any) { warn(e.message || "Load failed"); }
   }
   useEffect(() => { refresh(); }, []);
+
   const total = useMemo(() => rows.length, [rows]);
 
   function onEdit(r: Row, idx: number) {
     const id = r.id ?? null;
-    setEditingId(id); setEditingLabel(r.title || `Row ${idx + 1}`);
-    setForm({ operatorId: r.operatorId ?? 1, title: r.title ?? "", notes: r.notes ?? "", preferredLocations: toArray(r.preferredLocations) });
+    setEditingId(id);
+    setEditingLabel(r.title || `Row ${idx + 1}`);
+    setForm({
+      operatorId: r.operatorId ?? 1,
+      title: r.title ?? "",
+      notes: r.notes ?? "",
+      preferredLocations: toArray(r.preferredLocations),
+    });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   async function onSave(e: React.FormEvent) {
     e.preventDefault();
-    const payload = { operatorId: form.operatorId ?? 1, title: (form.title || "").trim(), notes: (form.notes || "").trim(), preferredLocations: toArray(form.preferredLocations) };
+    const payload = {
+      operatorId: form.operatorId ?? 1,
+      title: (form.title || "").trim(),
+      notes: (form.notes || "").trim(),
+      preferredLocations: toArray(form.preferredLocations),
+    };
     if (!payload.title) return warn("Operator Name is required");
     try {
       if (editingId != null) {
         const updated = await tryPutBoth(editingId, payload);
-        setRows(prev => prev.map(x => x.id === editingId ? { ...updated, preferredLocations: toArray(updated.preferredLocations) } : x));
+        setRows(prev =>
+          prev.map(x => x.id === editingId ? { ...updated, preferredLocations: toArray(updated.preferredLocations) } : x)
+        );
         setEditingId(null); setEditingLabel(""); setForm(empty); inform("Updated");
       } else {
         const saved = await send<Row>("/api/operatorRequirements/manual", "POST", payload);
@@ -93,31 +122,56 @@ export default function RequirementsView(): JSX.Element {
     } catch { warn("Delete failed"); }
   }
 
-  const header = "text-xl font-semibold";
+  const Title = ({ children }: { children: React.ReactNode }) =>
+    <h2 className="brand-title">{children}</h2>;
+
+  const Card: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+    <section
+      style={{
+        borderRadius: 16, padding: 20,
+        border: "1px solid rgba(255,255,255,0.08)",
+        background: "rgba(255,255,255,0.02)",
+        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)"
+      }}
+    >{children}</section>
+  );
+
+  const ButtonRow = ({ children }: { children: React.ReactNode }) =>
+    <div style={{ display: "grid", gridAutoFlow: "column", columnGap: 12, alignItems: "center" }}>{children}</div>;
+
+  const Pill = (props: React.ButtonHTMLAttributes<HTMLButtonElement> & { primary?: boolean }) => (
+    <button
+      {...props}
+      className="brand-btn"
+      data-variant={props.primary ? "primary" : undefined}
+    />
+  );
 
   return (
     <div className="space-y-6">
-      <SectionCard>
+      {/* Upload */}
+      <Card>
         <div className="flex items-center justify-between">
-          <h2 className={header}>Upload Requirements (PDF or CSV)</h2>
+          <Title>Upload Requirements (PDF or CSV)</Title>
           {csvOk && <span className="text-green-500 text-xs">✅ CSV uploaded</span>}
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <input type="file" className="text-sm"
-                 onChange={e => { const f = e.target.files?.[0]; if (f) (async () => {
-                   try { const fd = new FormData(); fd.append("file", f);
+                 onChange={e => { const f = e.target.files?.[0]; if (!f) return;
+                   (async () => { try {
+                     const fd = new FormData(); fd.append("file", f);
                      const r = await fetch(`${API_BASE}/api/operatorCsvUpload`, { method: "POST", body: fd });
                      setCsvOk(r.ok); inform("CSV uploaded"); await refresh();
-                   } catch { setCsvOk(false); warn("CSV upload failed"); }
-                 })(); }} />
-          {/* Outline pill like sidebar */}
-          <PillButton>Upload &amp; Process</PillButton>
+                   } catch { setCsvOk(false); } })();
+                 }} />
+          <Pill primary>Upload &amp; Process</Pill>
         </div>
-      </SectionCard>
+      </Card>
 
-      <SectionCard>
+      {/* Form */}
+      <Card>
         <div className="flex items-center justify-between">
-          <h2 className={header}>{editingId != null ? "Edit Requirement" : "Add Requirement Manually"}</h2>
+          <Title>{editingId != null ? "Edit Requirement" : "Add Requirement Manually"}</Title>
           {editingId != null && (
             <span className="text-xs px-2 py-1 rounded-full border border-white/15 opacity-80">
               Editing: {editingLabel} (ID {editingId})
@@ -136,8 +190,8 @@ export default function RequirementsView(): JSX.Element {
           </div>
           <div>
             <label className="block text-xs mb-1 opacity-80">Operator Name *</label>
-            <input className="w-full border rounded-md px-2 py-1.5 text-sm bg-transparent"
-                   value={form.title ?? ""} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g., Nando's" />
+            <input className="w-full border rounded-md px-2 py-1.5 text-sm bg-transparent" placeholder="e.g., Nando's"
+                   value={form.title ?? ""} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
           </div>
           <div className="md:col-span-2">
             <label className="block text-xs mb-1 opacity-80">Preferred Locations (comma separated)</label>
@@ -149,20 +203,20 @@ export default function RequirementsView(): JSX.Element {
             <input className="w-full border rounded-md px-2 py-1.5 text-sm bg-transparent"
                    value={form.notes ?? ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
           </div>
-          <div className="md:col-span-4" style={{ display: "grid", gridAutoFlow: "column", columnGap: 12, justifyContent: "start" }}>
-            {/* Filled = primary action; Outline = cancel, both same family */}
-            <PillButton type="submit" fill>{editingId != null ? "Update Requirement" : "Save Requirement"}</PillButton>
-            {editingId != null && (
-              <PillButton onClick={() => { setEditingId(null); setEditingLabel(""); setForm(empty); }}>Cancel Edit</PillButton>
-            )}
+          <div className="md:col-span-4">
+            <ButtonRow>
+              <Pill primary type="submit">{editingId != null ? "Update Requirement" : "Save Requirement"}</Pill>
+              {editingId != null && <Pill onClick={() => { setEditingId(null); setEditingLabel(""); setForm(empty); }}>Cancel Edit</Pill>}
+            </ButtonRow>
           </div>
         </form>
-      </SectionCard>
+      </Card>
 
-      <SectionCard>
+      {/* Table */}
+      <Card>
         <div className="flex items-center justify-between">
-          <h2 className={header}>Recent Manual Entries</h2>
-          <PillButton onClick={refresh}>Refresh</PillButton>
+          <Title>Recent Manual Entries</Title>
+          <Pill onClick={refresh}>Refresh</Pill>
         </div>
         <div className="text-xs opacity-70">Total: {total}</div>
 
@@ -180,7 +234,9 @@ export default function RequirementsView(): JSX.Element {
             <tbody>
               {rows.map((r, i) => (
                 <tr key={r.id ?? i} className="align-top">
-                  <td className="p-3 border-b border-white/10 whitespace-nowrap">{r.createdAt ? new Date(r.createdAt).toLocaleString() : "—"}</td>
+                  <td className="p-3 border-b border-white/10 whitespace-nowrap">
+                    {r.createdAt ? new Date(r.createdAt).toLocaleString() : "—"}
+                  </td>
                   <td className="p-3 border-b border-white/10 whitespace-nowrap">{r.title ?? "—"}</td>
                   <td className="p-3 border-b border-white/10">
                     <div className="truncate max-w-xs md:max-w-md" title={toArray(r.preferredLocations).join("; ")}>
@@ -192,8 +248,8 @@ export default function RequirementsView(): JSX.Element {
                   </td>
                   <td className="p-3 border-b border-white/10 whitespace-nowrap">
                     <div style={{ display: "grid", gridAutoFlow: "column", columnGap: 12, alignItems: "center" }}>
-                      <PillButton onClick={() => onEdit(r, i)}>Edit</PillButton>
-                      {r.id != null && <PillButton fill onClick={() => onDelete(r.id!)}>Delete</PillButton>}
+                      <Pill onClick={() => onEdit(r, i)}>Edit</Pill>
+                      {r.id != null && <Pill primary onClick={() => onDelete(r.id!)}>Delete</Pill>}
                     </div>
                   </td>
                 </tr>
@@ -202,7 +258,7 @@ export default function RequirementsView(): JSX.Element {
             </tbody>
           </table>
         </div>
-      </SectionCard>
+      </Card>
     </div>
   );
 }
