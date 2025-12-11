@@ -25,6 +25,34 @@ function toArray(v: any): string[] {
   if (typeof v === "string") return v.split(/[,;|]/).map(s => s.trim()).filter(Boolean);
   return [String(v)];
 }
+const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
+
+function rowsToCsv(rows: Row[]): string {
+  const headers = ["id", "operatorId", "name", "notes", "preferredLocations", "createdAt"];
+  const lines = rows.map(r => {
+    const name = r.title ?? "";
+    const locs = toArray(r.preferredLocations).join("; ");
+    return [
+      r.id ?? "",
+      r.operatorId ?? "",
+      name,
+      r.notes ?? "",
+      locs,
+      r.createdAt ?? ""
+    ].map(v => esc(String(v))).join(",");
+  });
+  return [headers.join(","), ...lines].join("\r\n");
+}
+
+function downloadCsvFile(filename: string, csv: string) {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 async function get<T>(p: string): Promise<T> {
   const r = await fetch(`${API_BASE}${p}`);
@@ -147,6 +175,13 @@ export default function RequirementsView(): JSX.Element {
     />
   );
 
+  function onDownloadCsv() {
+    const csv = rowsToCsv(rows);
+    const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    downloadCsvFile(`operator-requirements-${ts}.csv`, csv);
+    inform("CSV downloaded");
+  }
+
   return (
     <div className="space-y-6">
       {/* Upload */}
@@ -156,15 +191,22 @@ export default function RequirementsView(): JSX.Element {
           {csvOk && <span className="text-green-500 text-xs">✅ CSV uploaded</span>}
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <input type="file" className="text-sm"
-                 onChange={e => { const f = e.target.files?.[0]; if (!f) return;
-                   (async () => { try {
-                     const fd = new FormData(); fd.append("file", f);
-                     const r = await fetch(`${API_BASE}/api/operatorCsvUpload`, { method: "POST", body: fd });
-                     setCsvOk(r.ok); inform("CSV uploaded"); await refresh();
-                   } catch { setCsvOk(false); } })();
-                 }} />
+          <input
+            type="file"
+            className="text-sm"
+            onChange={e => {
+              const f = e.target.files?.[0]; if (!f) return;
+              (async () => {
+                try {
+                  const fd = new FormData(); fd.append("file", f);
+                  const r = await fetch(`${API_BASE}/api/operatorCsvUpload`, { method: "POST", body: fd });
+                  setCsvOk(r.ok); inform("CSV uploaded"); await refresh();
+                } catch { setCsvOk(false); }
+              })();
+            }}
+          />
           <Pill primary>Upload &amp; Process</Pill>
+          <Pill onClick={onDownloadCsv} title="Download all requirements as CSV">Download CSV</Pill>
         </div>
       </Card>
 
