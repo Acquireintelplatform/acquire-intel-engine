@@ -1,8 +1,9 @@
-// frontend/src/views/RequirementsView.tsx
+// src/views/RequirementsView.tsx
 import React, { useEffect, useMemo, useState } from "react";
 
-/* why: one API base var that matches Render */
+/* why: ensure API base works on Render + local */
 const API_BASE: string =
+  (import.meta as any).env?.VITE_API_URL ||
   (import.meta as any).env?.VITE_API_BASE ||
   (import.meta as any).env?.VITE_API_BASE_URL ||
   "https://acquire-intel-api.onrender.com";
@@ -46,7 +47,7 @@ async function apiJson<T = any>(path: string, method: "POST" | "PUT", body: any)
   return r.json();
 }
 
-export default function RequirementsView() {
+export default function RequirementsView(): JSX.Element {
   const [rows, setRows] = useState<Row[]>([]);
   const [csvOk, setCsvOk] = useState(false);
   const [msg, setMsg] = useState<string>("");
@@ -79,7 +80,7 @@ export default function RequirementsView() {
       notes: row.notes ?? "",
       preferredLocations: toArray(row.preferredLocations),
     });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "smooth" }); // why: make form visible
   }
 
   async function onSave(e: React.FormEvent) {
@@ -123,12 +124,12 @@ export default function RequirementsView() {
     };
 
     try {
-      let { ok, code } = await tryDelete(`${API_BASE}/api/operatorRequirements/manual/${id}`);
+      let { ok } = await tryDelete(`${API_BASE}/api/operatorRequirements/manual/${id}`);
       if (!ok) {
         const res2 = await tryDelete(`${API_BASE}/api/operatorRequirements/${id}`); // fallback
-        ok = res2.ok; code = res2.code;
+        ok = res2.ok;
       }
-      if (!ok) throw new Error(`delete-failed-${code}`);
+      if (!ok) throw new Error("delete-failed");
       setRows((prev) => prev.filter((x) => x.id !== id));
       inform("Deleted");
     } catch { warn("Delete failed"); }
@@ -147,6 +148,7 @@ export default function RequirementsView() {
 
   return (
     <div className="space-y-6">
+      {/* Upload */}
       <section className="rounded-2xl border p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-semibold">Upload Requirements (PDF or CSV)</h2>
@@ -156,68 +158,6 @@ export default function RequirementsView() {
             type="file"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) onUploadCsv(f); }}
           />
-          <button className="px-4 py-2 rounded-xl font-semibold"
-                  style={{ background: "#2fffd1", color: "#0b1220" }}>
-            Upload &amp; Process
-          </button>
-          {csvOk && <span className="text-green-600 font-medium">✅ CSV uploaded successfully.</span>}
-        </div>
-      </section>
-
-      <section className="rounded-2xl border p-5 space-y-4">
-        <h2 className="text-2xl font-semibold">{editingId ? "Edit Requirement" : "Add Requirement Manually"}</h2>
-        {msg && <div className="text-green-600">{msg}</div>}
-        {err && <div className="text-red-600">{err}</div>}
-
-        <form className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end" onSubmit={onSave}>
-          <div>
-            <label className="block text-sm mb-1">Operator</label>
-            <input
-              type="number" className="w-full border rounded-md px-2 py-1"
-              value={form.operatorId ?? ""}
-              onChange={(e) => setForm((f) => ({ ...f, operatorId: e.target.value ? Number(e.target.value) : null }))}
-            />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Operator Name *</label>
-            <input
-              className="w-full border rounded-md px-2 py-1" placeholder="e.g., Nando's"
-              value={form.title ?? ""}
-              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-            />
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-sm mb-1">Preferred Locations (comma separated)</label>
-            <input
-              className="w-full border rounded-md px-2 py-1" placeholder="e.g., London, Birmingham, Manchester"
-              value={toArray(form.preferredLocations).join(", ")}
-              onChange={(e) => setForm((f) => ({ ...f, preferredLocations: toArray(e.target.value) }))}
-            />
-          </div>
-          <div className="md:col-span-4">
-            <label className="block text-sm mb-1">Notes</label>
-            <input
-              className="w-full border rounded-md px-2 py-1"
-              value={form.notes ?? ""}
-              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-            />
-          </div>
-          <div className="md:col-span-4 flex gap-3">
-            <button type="submit" className="px-4 py-2 rounded-xl font-semibold"
-                    style={{ background: "#2fffd1", color: "#0b1220" }}>
-              {editingId ? "Update Requirement" : "Save Requirement"}
-            </button>
-            {editingId && (
-              <button type="button" className="px-4 py-2 rounded-xl font-semibold border"
-                      onClick={() => { setEditingId(null); setForm(empty); }}>
-                Cancel Edit
-              </button>
-            )}
-          </div>
-        </form>
-      </section>
-
-      <section className="rounded-2xl border p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-semibold">Recent Manual Entries</h2>
-          <button clas
+          <button
+            type="button"
+            className="px-4 py-2 ro
