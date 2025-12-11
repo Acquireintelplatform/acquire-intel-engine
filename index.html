@@ -16,36 +16,29 @@
 
     <script>
       (function () {
-        /* --- Redirect old System Health path to Scraper Status --- */
+        /* Route redirects */
         const redirects = {
+          "/map-insights": "/google-maps-engine",
           "/health": "/scraper-status",
           "/system-health": "/scraper-status",
         };
         const here = location.pathname.replace(/\/+$/, "");
         if (redirects[here]) {
           location.replace(redirects[here]);
-          return; // stop styling until after redirect
+          return;
         }
 
-        /* --- Global button styling to brand pills --- */
+        /* Button unifier */
         const PRIMARY_REGEX = /(save|update|delete|create|add|apply|submit|run|upload|process|sync|confirm)/i;
-
         function styleButton(btn) {
           if (!(btn instanceof HTMLButtonElement)) return;
           if (!btn.classList.contains('brand-btn')) btn.classList.add('brand-btn');
-
           const label = (btn.textContent || '').trim();
           const isSubmit = (btn.getAttribute('type') || '').toLowerCase() === 'submit';
           const looksPrimary = isSubmit || PRIMARY_REGEX.test(label);
-
-          // We keep uniform outline everywhere; leave attribute off.
           if (looksPrimary) btn.removeAttribute('data-variant');
         }
-
-        function scan(root) {
-          root.querySelectorAll?.('button').forEach(styleButton);
-        }
-
+        function scan(root) { root.querySelectorAll?.('button').forEach(styleButton); }
         scan(document);
         const obs = new MutationObserver(muts => {
           for (const m of muts) {
