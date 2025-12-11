@@ -6,36 +6,37 @@
   --glow: 0 1px 0 rgba(0,0,0,.25), 0 0 10px rgba(47,255,209,.20), 0 0 24px rgba(47,255,209,.14);
 }
 
-/* Base pill for all app buttons */
+/* Outline pill for ALL app buttons (uniform everywhere) */
 .brand-btn {
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
-  height: 40px;
-  padding: 0 16px;
-  border-radius: var(--pill-radius);
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: .2px;
-  user-select: none;
-  background: transparent;
-  color: #E7FEF9;
-  border: 1px solid rgba(47,255,209,0.35);
-  box-shadow: 0 0 0 1px rgba(47,255,209,0.22) inset, var(--glow);
-  transition: transform .06s ease, opacity .15s ease, box-shadow .15s ease, background .15s ease, color .15s ease;
+  height: 40px !important;
+  padding: 0 16px !important;
+  border-radius: var(--pill-radius) !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  letter-spacing: .2px !important;
+  user-select: none !important;
+
+  /* FORCE outline style (override any old green fills) */
+  background: transparent !important;
+  color: #E7FEF9 !important;
+  border: 1px solid rgba(47,255,209,0.35) !important;
+  box-shadow: 0 0 0 1px rgba(47,255,209,0.22) inset, var(--glow) !important;
+
+  transition:
+    transform .06s ease,
+    opacity .15s ease,
+    box-shadow .15s ease,
+    background .15s ease,
+    color .15s ease !important;
+
   width: auto !important;
 }
-.brand-btn:hover { opacity: .95; }
-.brand-btn:active { transform: translateY(1px); }
-
-/* Filled variant = primary actions (Option A) */
-.brand-btn[data-variant="primary"] {
-  background: var(--teal);
-  color: #0b1220;
-  border: 1px solid rgba(255,255,255,0.18);
-  box-shadow: 0 0 0 1px rgba(47,255,209,0.35) inset, var(--glow);
-}
-.brand-btn[disabled] { opacity: .6; cursor: not-allowed; }
+.brand-btn:hover { opacity: .95 !important; }
+.brand-btn:active { transform: translateY(1px) !important; }
+.brand-btn[disabled] { opacity: .6 !important; cursor: not-allowed !important; }
 
 /* Keep inputs and file pickers untouched */
 input[type="file"] { all: revert; }
@@ -43,12 +44,20 @@ input[type="file"] { all: revert; }
 /* HIDE legacy white page titles injected by old wrappers */
 main > h1:first-of-type { display: none !important; }
 
-/* Premium teal title (use on section headers) */
+/* Premium teal section titles */
 .brand-title {
-  color: var(--teal);
-  font-weight: 800;
-  font-size: 22px;
-  letter-spacing: .2px;
-  text-shadow: 0 0 10px rgba(47,255,209,.30), 0 0 20px rgba(47,255,209,.18);
-  margin: 0 0 8px 0;
+  color: var(--teal) !important;
+  font-weight: 800 !important;
+  font-size: 22px !important;
+  letter-spacing: .2px !important;
+  text-shadow: 0 0 10px rgba(47,255,209,.30), 0 0 20px rgba(47,255,209,.18) !important;
+  margin: 0 0 8px 0 !important;
+}
+
+/* If any button was marked as "primary", make it look the SAME outline (uniform) */
+.brand-btn[data-variant="primary"] {
+  background: transparent !important;
+  color: #E7FEF9 !important;
+  border: 1px solid rgba(47,255,209,0.35) !important;
+  box-shadow: 0 0 0 1px rgba(47,255,209,0.22) inset, var(--glow) !important;
 }
