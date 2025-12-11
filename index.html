@@ -1,12 +1,74 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1"
+    />
     <title>Acquire Intel Engine</title>
+    <!-- Brand-wide pill styles -->
+    <link rel="stylesheet" href="/src/brand.css" />
   </head>
   <body>
     <div id="root"></div>
+
     <script type="module" src="/src/main.tsx"></script>
+
+    <!--
+      Global enhancer:
+      - Turns every <button> into a sidebar-style pill (teal outline + glow).
+      - Auto-detects "primary" actions (submit buttons, or text like Save/Update/Delete/Upload/Process/Create/Apply/Run/Sync)
+        and sets them to the filled teal pill (Option A).
+      - Uses a MutationObserver so buttons added later (route changes) are styled too.
+    -->
+    <script>
+      (function () {
+        const PRIMARY_REGEX = /(save|update|delete|create|add|apply|submit|run|upload|process|sync|confirm)/i;
+
+        function styleButton(btn) {
+          if (!(btn instanceof HTMLButtonElement)) return;
+          if (!btn.classList.contains('brand-btn')) {
+            btn.classList.add('brand-btn');
+          }
+
+          // Decide variant
+          const label = (btn.textContent || '').trim();
+          const isSubmit = (btn.getAttribute('type') || '').toLowerCase() === 'submit';
+          const looksPrimary = isSubmit || PRIMARY_REGEX.test(label);
+
+          if (looksPrimary) {
+            btn.setAttribute('data-variant', 'primary');
+          } else {
+            btn.removeAttribute('data-variant');
+          }
+        }
+
+        function scan(root) {
+          const buttons = root.querySelectorAll
+            ? root.querySelectorAll('button')
+            : [];
+          buttons.forEach(styleButton);
+        }
+
+        // Initial run
+        scan(document);
+
+        // Observe future DOM changes (SPA route swaps etc.)
+        const obs = new MutationObserver(mutations => {
+          for (const m of mutations) {
+            m.addedNodes.forEach(node => {
+              if (node.nodeType !== 1) return; // element
+              if (node.tagName === 'BUTTON') styleButton(node);
+              scan(node);
+            });
+          }
+        });
+        obs.observe(document.documentElement, { childList: true, subtree: true });
+
+        // Re-style on page show (e.g., BFCache)
+        window.addEventListener('pageshow', () => scan(document));
+      })();
+    </script>
   </body>
 </html>
