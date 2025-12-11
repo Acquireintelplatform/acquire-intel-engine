@@ -1,6 +1,7 @@
 // src/views/RequirementsView.tsx
 import React, { useEffect, useMemo, useState } from "react";
 
+/* Single API base (Render + local) */
 const API_BASE: string =
   (import.meta as any).env?.VITE_API_URL ||
   (import.meta as any).env?.VITE_API_BASE ||
@@ -29,9 +30,25 @@ async function get<T>(p: string): Promise<T> {
   return r.json();
 }
 async function send<T>(p: string, m: "POST" | "PUT", b: any): Promise<T> {
-  const r = await fetch(`${API_BASE}${p}`, { method: m, headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) });
+  const r = await fetch(`${API_BASE}${p}`, {
+    method: m,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(b),
+  });
   if (!r.ok) throw new Error(`${r.status} ${p}`);
   return r.json();
+}
+async function tryPutBoth(id: number, body: any): Promise<Row> {
+  // why: tolerate either /manual/:id or legacy /:id
+  const a = await fetch(`${API_BASE}/api/operatorRequirements/manual/${id}`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  if (a.ok) return a.json();
+  const b = await fetch(`${API_BASE}/api/operatorRequirements/${id}`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  if (b.ok) return b.json();
+  throw new Error("PUT failed");
 }
 
 export default function RequirementsView(): JSX.Element {
@@ -43,6 +60,7 @@ export default function RequirementsView(): JSX.Element {
   const empty: Row = { operatorId: 1, title: "", notes: "", preferredLocations: [] };
   const [form, setForm] = useState<Row>(empty);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingLabel, setEditingLabel] = useState<string>("");
 
   function inform(s: string) { setMsg(s); setTimeout(() => setMsg(""), 2000); }
   function warn(s: string) { setErr(s); setTimeout(() => setErr(""), 3000); }
@@ -50,15 +68,20 @@ export default function RequirementsView(): JSX.Element {
   async function refresh() {
     try {
       const data = await get<Row[]>("/api/operatorRequirements/manual");
-      setRows((Array.isArray(data) ? data : []).map(r => ({ ...r, preferredLocations: toArray(r.preferredLocations) })));
+      setRows((Array.isArray(data) ? data : []).map(r => ({
+        ...r, preferredLocations: toArray(r.preferredLocations),
+      })));
     } catch (e: any) { warn(e.message || "Load failed"); }
   }
   useEffect(() => { refresh(); }, []);
 
   const total = useMemo(() => rows.length, [rows]);
 
-  function onEdit(r: Row) {
-    setEditingId(r.id!);
+  function onEdit(r: Row, idx: number) {
+    const id = r.id ?? null;
+    // why: populate form always, even if id missing (then it becomes a new save)
+    setEditingId(id);
+    setEditingLabel(r.title || `Row ${idx + 1}`);
     setForm({
       operatorId: r.operatorId ?? 1,
       title: r.title ?? "",
@@ -78,10 +101,12 @@ export default function RequirementsView(): JSX.Element {
     };
     if (!payload.title) return warn("Operator Name is required");
     try {
-      if (editingId) {
-        const updated = await send<Row>(`/api/operatorRequirements/manual/${editingId}`, "PUT", payload);
-        setRows(prev => prev.map(x => x.id === editingId ? { ...updated, preferredLocations: toArray(updated.preferredLocations) } : x));
-        setEditingId(null); setForm(empty); inform("Updated");
+      if (editingId != null) {
+        const updated = await tryPutBoth(editingId, payload);
+        setRows(prev =>
+          prev.map(x => x.id === editingId ? { ...updated, preferredLocations: toArray(updated.preferredLocations) } : x)
+        );
+        setEditingId(null); setEditingLabel(""); setForm(empty); inform("Updated");
       } else {
         const saved = await send<Row>("/api/operatorRequirements/manual", "POST", payload);
         setRows(prev => [...prev, { ...saved, preferredLocations: toArray(saved.preferredLocations) }]);
@@ -115,17 +140,32 @@ export default function RequirementsView(): JSX.Element {
 
   return (
     <div className="space-y-6">
+      {/* Upload */}
       <section className="rounded-2xl border p-5 space-y-4">
         <h2 className="text-2xl font-semibold">Upload Requirements (PDF or CSV)</h2>
         <div className="flex gap-3 items-center">
           <input type="file" onChange={e => { const f = e.target.files?.[0]; if (f) onCsv(f); }} />
-          <button type="button" className="px-4 py-2 rounded-xl font-semibold" style={{ background: "#2fffd1", color: "#0b1220" }}>Upload &amp; Process</button>
+          <button type="button" className="px-4 py-2 rounded-xl font-semibold"
+                  style={{ background: "#2fffd1", color: "#0b1220" }}>
+            Upload &amp; Process
+          </button>
           {csvOk && <span className="text-green-600 font-medium">✅ CSV uploaded successfully.</span>}
         </div>
       </section>
 
-      <section className="rounded-2xl border p-5 space-y-4">
-        <h2 className="text-2xl font-semibold">{editingId ? "Edit Requirement" : "Add Requirement Manually"}</h2>
+      {/* Form */}
+      <section className="rounded-2xl border p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-semibold">
+            {editingId != null ? "Edit Requirement" : "Add Requirement Manually"}
+          </h2>
+          {editingId != null && (
+            <span className="text-sm px-3 py-1 rounded-full border">
+              Editing: {editingLabel} (ID {editingId})
+            </span>
+          )}
+        </div>
+
         {msg && <div className="text-green-600">{msg}</div>}
         {err && <div className="text-red-600">{err}</div>}
 
@@ -150,13 +190,14 @@ export default function RequirementsView(): JSX.Element {
             <input className="w-full border rounded-md px-2 py-1"
               value={form.notes ?? ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
           </div>
-          <div className="md:col-span-4 flex gap-3">
-            <button type="submit" className="px-4 py-2 rounded-xl font-semibold" style={{ background: "#2fffd1", color: "#0b1220" }}>
-              {editingId ? "Update Requirement" : "Save Requirement"}
+          <div className="md:col-span-4 flex flex-wrap gap-3">
+            <button type="submit" className="px-4 py-2 rounded-xl font-semibold"
+                    style={{ background: "#2fffd1", color: "#0b1220" }}>
+              {editingId != null ? "Update Requirement" : "Save Requirement"}
             </button>
-            {editingId && (
+            {editingId != null && (
               <button type="button" className="px-4 py-2 rounded-xl font-semibold border"
-                onClick={() => { setEditingId(null); setForm(empty); }}>
+                      onClick={() => { setEditingId(null); setEditingLabel(""); setForm(empty); }}>
                 Cancel Edit
               </button>
             )}
@@ -164,10 +205,14 @@ export default function RequirementsView(): JSX.Element {
         </form>
       </section>
 
+      {/* Table */}
       <section className="rounded-2xl border p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-2xl font-semibold">Recent Manual Entries</h2>
-          <button type="button" className="px-4 py-2 rounded-xl font-semibold" style={{ background: "#2fffd1", color: "#0b1220" }} onClick={refresh}>Refresh</button>
+          <button type="button" className="px-4 py-2 rounded-xl font-semibold"
+                  style={{ background: "#2fffd1", color: "#0b1220" }} onClick={refresh}>
+            Refresh
+          </button>
         </div>
         <div className="text-sm opacity-70">Total: {total}</div>
 
@@ -175,24 +220,34 @@ export default function RequirementsView(): JSX.Element {
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left">
-                <th className="p-3 border-b">Created</th>
-                <th className="p-3 border-b">Name</th>
+                <th className="p-3 border-b w-44">Created</th>
+                <th className="p-3 border-b w-64">Name</th>
                 <th className="p-3 border-b">Preferred Locations</th>
-                <th className="p-3 border-b">Notes</th>
-                <th className="p-3 border-b">Action</th>
+                <th className="p-3 border-b w-64">Notes</th>
+                <th className="p-3 border-b w-44">Action</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map(r => (
-                <tr key={r.id}>
+              {rows.map((r, i) => (
+                <tr key={r.id ?? i}>
                   <td className="p-3 border-b">{r.createdAt ? new Date(r.createdAt).toLocaleString() : "—"}</td>
                   <td className="p-3 border-b">{r.title ?? "—"}</td>
                   <td className="p-3 border-b">{toArray(r.preferredLocations).join("; ") || "—"}</td>
                   <td className="p-3 border-b">{r.notes ?? "—"}</td>
                   <td className="p-3 border-b">
                     <div className="flex gap-2">
-                      <button type="button" className="px-3 py-1 rounded-xl font-semibold" style={{ background: "#2fffd1", color: "#0b1220" }} onClick={() => onEdit(r)}>Edit</button>
-                      <button type="button" className="px-3 py-1 rounded-xl font-semibold" style={{ background: "#2fffd1", color: "#0b1220" }} onClick={() => onDelete(r.id!)}>Delete</button>
+                      <button type="button" className="px-3 py-1 rounded-md font-medium"
+                              style={{ background: "#2fffd1", color: "#0b1220" }}
+                              onClick={() => onEdit(r, i)}>
+                        Edit
+                      </button>
+                      {r.id != null && (
+                        <button type="button" className="px-3 py-1 rounded-md font-medium"
+                                style={{ background: "#2fffd1", color: "#0b1220" }}
+                                onClick={() => onDelete(r.id!)}>
+                          Delete
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
