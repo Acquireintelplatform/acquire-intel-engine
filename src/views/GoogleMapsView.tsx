@@ -1,11 +1,11 @@
 // src/views/googlemapsview.tsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 
-/** Reads your key from Render env: VITE_GOOGLE_MAPS_API_KEY */
+/** Uses your Render env var VITE_GOOGLE_MAPS_API_KEY */
 const GOOGLE_KEY: string =
   (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY || "";
 
-/* ==== Categories (7) ====================================================== */
+/* ==== Categories ========================================================== */
 type CategoryKey =
   | "lateFilings"       // 1
   | "leaseExpiring"     // 2
@@ -32,10 +32,10 @@ const CATEGORY_COLOR: Record<CategoryKey, string> = {
   retail:         "#60A5FA",
   driveThru:      "#A78BFA",
   shoppingMalls:  "#F472B6",
-  newProperties:  "#2FFFD1", // brand teal
+  newProperties:  "#2FFFD1",
 };
 
-/* ==== Demo data (replace with API later) ================================== */
+/* ==== Demo pins (swap for API later) ===================================== */
 type Pin = {
   id: string | number;
   title: string;
@@ -46,13 +46,13 @@ type Pin = {
 };
 
 const DEMO_PINS: Pin[] = [
-  { id: 1, title: "Late filing – Soho Ltd", lat: 51.5136, lng: -0.1365, category: "lateFilings" },
-  { id: 2, title: "Lease expiring – Shoreditch", lat: 51.5262, lng: -0.0779, category: "leaseExpiring" },
-  { id: 3, title: "F&B – Covent Garden", lat: 51.5129, lng: -0.1247, category: "foodBeverage" },
-  { id: 4, title: "Retail – Oxford Street", lat: 51.5154, lng: -0.141,  category: "retail" },
-  { id: 5, title: "Drive-thru – Wembley", lat: 51.556,  lng: -0.2796, category: "driveThru" },
-  { id: 6, title: "Shopping mall – Westfield", lat: 51.5079, lng: -0.2244, category: "shoppingMalls" },
-  { id: 7, title: "New property – Battersea", lat: 51.4794, lng: -0.1447, category: "newProperties" },
+  { id: 1, title: "Late filing – Soho Ltd",     lat: 51.5136, lng: -0.1365, category: "lateFilings" },
+  { id: 2, title: "Lease expiring – Shoreditch",lat: 51.5262, lng: -0.0779, category: "leaseExpiring" },
+  { id: 3, title: "F&B – Covent Garden",        lat: 51.5129, lng: -0.1247, category: "foodBeverage" },
+  { id: 4, title: "Retail – Oxford Street",     lat: 51.5154, lng: -0.141,  category: "retail" },
+  { id: 5, title: "Drive-thru – Wembley",       lat: 51.556,  lng: -0.2796, category: "driveThru" },
+  { id: 6, title: "Shopping mall – Westfield",  lat: 51.5079, lng: -0.2244, category: "shoppingMalls" },
+  { id: 7, title: "New property – Battersea",   lat: 51.4794, lng: -0.1447, category: "newProperties" },
 ];
 
 /* ==== Loader ============================================================== */
@@ -105,7 +105,6 @@ function svgPin(color: string, label?: string): google.maps.Icon {
 /* ==== Component =========================================================== */
 export default function GoogleMapsView(): JSX.Element {
   const mapRef = useRef<HTMLDivElement | null>(null);
-  const panoRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
 
   const [err, setErr] = useState("");
@@ -128,37 +127,24 @@ export default function GoogleMapsView(): JSX.Element {
     let map: google.maps.Map | null = null;
     let markers: google.maps.Marker[] = [];
     let infowindow: google.maps.InfoWindow | null = null;
-    let panorama: google.maps.StreetViewPanorama | null = null;
-    let svService: google.maps.StreetViewService | null = null;
     let autocomplete: google.maps.places.Autocomplete | null = null;
 
     loadGoogle(GOOGLE_KEY)
       .then((g) => {
-        if (!mapRef.current || !panoRef.current) return;
+        if (!mapRef.current) return;
 
-        // Map
+        // Full-page map with Pegman enabled
         map = new g.maps.Map(mapRef.current, {
           center: { lat: 51.5074, lng: -0.1278 }, // London
           zoom: 11,
           mapTypeControl: false,
           fullscreenControl: true,
-          streetViewControl: false, // we manage our own split panel
-          gestureHandling: "greedy", // <-- normal scroll zoom, no Ctrl hint
-          scrollwheel: true,         // <-- allow wheel zoom explicitly
+          streetViewControl: true, // <-- pegman shown (drag/drop)
+          gestureHandling: "greedy",
+          scrollwheel: true,
           zoomControl: true,
         });
 
-        // Street View (right panel)
-        panorama = new g.maps.StreetViewPanorama(panoRef.current, {
-          addressControl: false,
-          linksControl: true,
-          panControl: false,
-          fullscreenControl: true,
-          motionTracking: false,
-          visible: false,
-        });
-
-        svService = new g.maps.StreetViewService();
         infowindow = new g.maps.InfoWindow();
 
         // Places Autocomplete
@@ -174,20 +160,6 @@ export default function GoogleMapsView(): JSX.Element {
             const latLng = { lat: loc.lat(), lng: loc.lng() };
             map.panTo(latLng);
             map.setZoom(16);
-            openStreetViewAt(latLng);
-          });
-        }
-
-        function openStreetViewAt(latLng: google.maps.LatLngLiteral) {
-          if (!svService || !panorama) return;
-          svService.getPanorama({ location: latLng, radius: 50 }, (data, status) => {
-            if (status === g.maps.StreetViewStatus.OK && data && data.location) {
-              panorama!.setPano(data.location.pano);
-              panorama!.setPov({ heading: 0, pitch: 0 });
-              panorama!.setVisible(true);
-            } else {
-              panorama!.setVisible(false);
-            }
           });
         }
 
@@ -204,17 +176,15 @@ export default function GoogleMapsView(): JSX.Element {
             });
 
             m.addListener("click", () => {
-              const latLng = { lat: p.lat, lng: p.lng };
               infowindow!.setContent(
                 `<div style="min-width:240px">
                   <div style="font-weight:700;margin-bottom:4px">${p.title}</div>
                   <div style="opacity:.8;margin-bottom:6px">${CATEGORY_LABEL[p.category]}</div>
-                  <div style="opacity:.75;font-size:12px">Street View opened →</div>
+                  <div style="opacity:.75;font-size:12px">Tip: drag the yellow man to enter Street View.</div>
                 </div>`
               );
               infowindow!.open({ map: map!, anchor: m });
-              openStreetViewAt(latLng);
-              map!.panTo(latLng);
+              map!.panTo({ lat: p.lat, lng: p.lng });
             });
 
             markers.push(m);
@@ -223,7 +193,7 @@ export default function GoogleMapsView(): JSX.Element {
 
         draw();
 
-        // Add Marker button handler
+        // Add Marker button → drop a teal pin at map center (draggable)
         function addMarkerAtCenter() {
           if (!map) return;
           const pos = map.getCenter();
@@ -234,7 +204,7 @@ export default function GoogleMapsView(): JSX.Element {
             title: "Dropped pin",
             icon: svgPin(CATEGORY_COLOR.newProperties),
             map,
-            draggable: true, // why: refine exact spot on street
+            draggable: true,
           });
           temp.addListener("click", () => {
             infowindow!.setContent(
@@ -244,12 +214,10 @@ export default function GoogleMapsView(): JSX.Element {
                </div>`
             );
             infowindow!.open({ map: map!, anchor: temp });
-            openStreetViewAt(latLng);
           });
           markers.push(temp);
         }
 
-        // Wire button click
         const btn = document.getElementById("add-marker-btn");
         btn?.addEventListener("click", addMarkerAtCenter);
 
@@ -258,7 +226,6 @@ export default function GoogleMapsView(): JSX.Element {
           markers.forEach(m => m.setMap(null));
           markers = [];
           infowindow?.close();
-          panorama?.setVisible(false);
         };
       })
       .catch((e) => setErr(e.message || String(e)));
@@ -361,44 +328,20 @@ export default function GoogleMapsView(): JSX.Element {
         </span>
       </div>
 
-      {/* Split layout: Map (left) + Street View (right) */}
-      <style>{`
-        @media (min-width: 1024px) {
-          .split-panels { grid-template-columns: 65% 35%; }
-        }
-      `}</style>
-
-      <div className="split-panels" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
-        <div
-          ref={mapRef}
-          style={{
-            height: "60vh",
-            minHeight: 360,
-            width: "100%",
-            borderRadius: 12,
-            overflow: "hidden",
-            boxShadow:
-              "0 1px 0 rgba(0,0,0,.25), 0 0 10px rgba(47,255,209,.20), 0 0 24px rgba(47,255,209,.14)",
-            border: "1px solid rgba(255,255,255,0.08)",
-          }}
-        />
-        <div
-          ref={panoRef}
-          style={{
-            height: "60vh",
-            minHeight: 360,
-            width: "100%",
-            borderRadius: 12,
-            overflow: "hidden",
-            boxShadow:
-              "0 1px 0 rgba(0,0,0,.25), 0 0 10px rgba(47,255,209,.20), 0 0 24px rgba(47,255,209,.14)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            background:
-              "linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04))",
-          }}
-          title="Street View"
-        />
-      </div>
+      {/* FULL-PAGE MAP (Pegman enabled) */}
+      <div
+        ref={mapRef}
+        style={{
+          height: "78vh",           // tall/full page
+          minHeight: 520,
+          width: "100%",
+          borderRadius: 12,
+          overflow: "hidden",
+          boxShadow:
+            "0 1px 0 rgba(0,0,0,.25), 0 0 10px rgba(47,255,209,.20), 0 0 24px rgba(47,255,209,.14)",
+          border: "1px solid rgba(255,255,255,0.08)",
+        }}
+      />
     </section>
   );
 }
