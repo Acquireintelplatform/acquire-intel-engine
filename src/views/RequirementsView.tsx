@@ -136,18 +136,18 @@ export default function RequirementsView(): JSX.Element {
     } catch (e: any) { setCsvOk(false); warn(e.message || "CSV upload failed"); }
   }
 
-  /* Premium, compact buttons – force inline and auto width (override global styles) */
-  const btnBase = "ai-btn !inline-flex !w-auto items-center justify-center rounded-md text-sm font-semibold transition shadow-sm";
+  /* Premium look: strict inline buttons with guaranteed spacing */
+  const btnBase = "ai-btn inline-flex items-center justify-center rounded-md text-sm font-semibold transition shadow-sm";
   const btnPrimary = `${btnBase} px-3 h-9 hover:opacity-90 active:opacity-80`;
   const btnGhost = `${btnBase} px-3 h-9 border border-white/20 hover:bg-white/5`;
 
   return (
     <div className="space-y-6">
-      {/* local style overrides to ensure premium inline buttons */}
       <style>{`
-        .ai-btn { display: inline-flex !important; width: auto !important; }
+        .ai-btn { width: auto !important; }
         .ai-card { background: rgba(255,255,255,0.02); border-color: rgba(255,255,255,0.08); }
         .ai-hdr { letter-spacing: .2px; }
+        .ai-buttongrp { display: grid; grid-auto-flow: column; gap: 12px; align-items: center; }
       `}</style>
 
       {/* Upload */}
@@ -157,11 +157,7 @@ export default function RequirementsView(): JSX.Element {
           {csvOk && <span className="text-green-500 text-xs">✅ CSV uploaded</span>}
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <input
-            type="file"
-            className="text-sm"
-            onChange={e => { const f = e.target.files?.[0]; if (f) onCsv(f); }}
-          />
+          <input type="file" className="text-sm" onChange={e => { const f = e.target.files?.[0]; if (f) onCsv(f); }} />
           <button type="button" className={btnPrimary} style={{ background: "#2fffd1", color: "#0b1220" }}>
             Upload &amp; Process
           </button>
@@ -205,7 +201,7 @@ export default function RequirementsView(): JSX.Element {
             <input className="w-full border rounded-md px-2 py-1.5 text-sm bg-transparent"
               value={form.notes ?? ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
           </div>
-          <div className="md:col-span-4 flex flex-wrap gap-2">
+          <div className="md:col-span-4 ai-buttongrp">
             <button type="submit" className={btnPrimary} style={{ background: "#2fffd1", color: "#0b1220" }}>
               {editingId != null ? "Update Requirement" : "Save Requirement"}
             </button>
@@ -253,7 +249,7 @@ export default function RequirementsView(): JSX.Element {
                     <div className="whitespace-pre-wrap break-words max-w-xs md:max-w-sm">{r.notes ?? "—"}</div>
                   </td>
                   <td className="p-3 border-b border-white/10 whitespace-nowrap">
-                    <div className="flex items-center gap-2">
+                    <div className="ai-buttongrp">
                       <button type="button" className={btnGhost} onClick={() => onEdit(r, i)} title="Edit">Edit</button>
                       {r.id != null && (
                         <button
