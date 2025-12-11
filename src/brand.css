@@ -19,19 +19,12 @@
   letter-spacing: .2px !important;
   user-select: none !important;
 
-  /* FORCE outline style (override any old green fills) */
   background: transparent !important;
   color: #E7FEF9 !important;
   border: 1px solid rgba(47,255,209,0.35) !important;
   box-shadow: 0 0 0 1px rgba(47,255,209,0.22) inset, var(--glow) !important;
 
-  transition:
-    transform .06s ease,
-    opacity .15s ease,
-    box-shadow .15s ease,
-    background .15s ease,
-    color .15s ease !important;
-
+  transition: transform .06s ease, opacity .15s ease, box-shadow .15s ease, background .15s ease, color .15s ease !important;
   width: auto !important;
 }
 .brand-btn:hover { opacity: .95 !important; }
@@ -54,10 +47,16 @@ main > h1:first-of-type { display: none !important; }
   margin: 0 0 8px 0 !important;
 }
 
-/* If any button was marked as "primary", make it look the SAME outline (uniform) */
+/* If any button was marked as "primary", keep the same outline (uniform) */
 .brand-btn[data-variant="primary"] {
   background: transparent !important;
   color: #E7FEF9 !important;
   border: 1px solid rgba(47,255,209,0.35) !important;
   box-shadow: 0 0 0 1px rgba(47,255,209,0.22) inset, var(--glow) !important;
+}
+
+/* ===== Hide the extra System Health nav item (any route variant) ===== */
+a[href="/health"],
+a[href="/system-health"] {
+  display: none !important;
 }
