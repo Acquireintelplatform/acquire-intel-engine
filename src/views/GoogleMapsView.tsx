@@ -49,8 +49,8 @@ const DEMO_PINS: Pin[] = [
   { id: 1, title: "Late filing – Soho Ltd", lat: 51.5136, lng: -0.1365, category: "lateFilings" },
   { id: 2, title: "Lease expiring – Shoreditch", lat: 51.5262, lng: -0.0779, category: "leaseExpiring" },
   { id: 3, title: "F&B – Covent Garden", lat: 51.5129, lng: -0.1247, category: "foodBeverage" },
-  { id: 4, title: "Retail – Oxford Street", lat: 51.5154, lng: -0.1410, category: "retail" },
-  { id: 5, title: "Drive-thru – Wembley", lat: 51.5560, lng: -0.2796, category: "driveThru" },
+  { id: 4, title: "Retail – Oxford Street", lat: 51.5154, lng: -0.141,  category: "retail" },
+  { id: 5, title: "Drive-thru – Wembley", lat: 51.556,  lng: -0.2796, category: "driveThru" },
   { id: 6, title: "Shopping mall – Westfield", lat: 51.5079, lng: -0.2244, category: "shoppingMalls" },
   { id: 7, title: "New property – Battersea", lat: 51.4794, lng: -0.1447, category: "newProperties" },
 ];
@@ -58,7 +58,8 @@ const DEMO_PINS: Pin[] = [
 /* ==== Loader ============================================================== */
 function loadGoogle(apiKey: string): Promise<typeof google> {
   if (!apiKey) return Promise.reject(new Error("Missing VITE_GOOGLE_MAPS_API_KEY"));
-  if ((window as any).google?.maps) return Promise.resolve((window as any).google);
+  // @ts-ignore
+  if (window.google?.maps) return Promise.resolve((window as any).google);
 
   const existing = document.querySelector<HTMLScriptElement>('script[data-google-loader="1"]');
   if (existing) {
@@ -69,7 +70,9 @@ function loadGoogle(apiKey: string): Promise<typeof google> {
   }
 
   const s = document.createElement("script");
-  s.async = true; s.defer = true; s.setAttribute("data-google-loader", "1");
+  s.async = true;
+  s.defer = true;
+  s.setAttribute("data-google-loader", "1");
   s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(apiKey)}&libraries=places`;
   document.head.appendChild(s);
 
@@ -184,7 +187,7 @@ export default function GoogleMapsView(): JSX.Element {
                 `<div style="min-width:240px">
                   <div style="font-weight:700;margin-bottom:4px">${p.title}</div>
                   <div style="opacity:.8;margin-bottom:6px">${CATEGORY_LABEL[p.category]}</div>
-                  <div style="opacity:.75;font-size:12px">Click opened Street View →</div>
+                  <div style="opacity:.75;font-size:12px">Street View opened →</div>
                 </div>`
               );
               infowindow!.open({ map: map!, anchor: m });
@@ -207,9 +210,7 @@ export default function GoogleMapsView(): JSX.Element {
       })
       .catch((e) => setErr(e.message || String(e)));
 
-    return () => {
-      map = null;
-    };
+    return () => { map = null; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(selected)]);
 
@@ -289,28 +290,43 @@ export default function GoogleMapsView(): JSX.Element {
       </div>
 
       {/* Split layout: Map (left) + Street View (right) */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "1fr",
-          gap: 12,
-        }}
-      >
-        {/* responsive: stack on small, split on >= 1024px */}
-        <style>{`
-          @media (min-width: 1024px) {
-            .split-panels { grid-template-columns: 65% 35%; }
-          }
-        `}</style>
+      <style>{`
+        @media (min-width: 1024px) {
+          .split-panels { grid-template-columns: 65% 35%; }
+        }
+      `}</style>
 
-        <div className="split-panels" style={{ display: "grid", gap: 12 }}>
-          <div
-            ref={mapRef}
-            style={{
-              height: "60vh",
-              minHeight: 360,
-              width: "100%",
-              borderRadius: 12,
-              overflow: "hidden",
-              boxShadow:
-                "0 1px 0 rgba(0,0,0,.25), 0 0 10px rgba(47,255,209,.20), 0 0 24px rgba(47,255,209,.14)",
+      <div className="split-panels" style={{ display: "grid", gridTemplateColumns: "1fr", gap: 12 }}>
+        <div
+          ref={mapRef}
+          style={{
+            height: "60vh",
+            minHeight: 360,
+            width: "100%",
+            borderRadius: 12,
+            overflow: "hidden",
+            boxShadow:
+              "0 1px 0 rgba(0,0,0,.25), 0 0 10px rgba(47,255,209,.20), 0 0 24px rgba(47,255,209,.14)",
+            border: "1px solid rgba(255,255,255,0.08)",
+          }}
+        />
+        <div
+          ref={panoRef}
+          style={{
+            height: "60vh",
+            minHeight: 360,
+            width: "100%",
+            borderRadius: 12,
+            overflow: "hidden",
+            boxShadow:
+              "0 1px 0 rgba(0,0,0,.25), 0 0 10px rgba(47,255,209,.20), 0 0 24px rgba(47,255,209,.14)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.04))",
+          }}
+          title="Street View"
+        />
+      </div>
+    </section>
+  );
+}
