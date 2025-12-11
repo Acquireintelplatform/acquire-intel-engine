@@ -49,3 +49,6 @@
 
 /* Keep inputs and file pickers untouched */
 input[type="file"] { all: revert; }
+
+/* HIDE duplicate white page titles injected by old wrappers */
+main > h1:first-of-type { display: none !important; }
