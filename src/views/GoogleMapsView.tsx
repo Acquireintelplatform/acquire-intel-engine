@@ -25,18 +25,17 @@ const CATEGORY_LABEL: Record<CategoryKey, string> = {
   newProperties: "New properties",
 };
 
-/* Brand-friendly distinct pin colors */
 const CATEGORY_COLOR: Record<CategoryKey, string> = {
-  lateFilings:    "#FF4D4D", // red
-  leaseExpiring:  "#FFB020", // amber
-  foodBeverage:   "#22C55E", // green
-  retail:         "#60A5FA", // blue
-  driveThru:      "#A78BFA", // purple
-  shoppingMalls:  "#F472B6", // pink
-  newProperties:  "#2FFFD1", // brand teal
+  lateFilings:    "#FF4D4D",
+  leaseExpiring:  "#FFB020",
+  foodBeverage:   "#22C55E",
+  retail:         "#60A5FA",
+  driveThru:      "#A78BFA",
+  shoppingMalls:  "#F472B6",
+  newProperties:  "#2FFFD1",
 };
 
-/* ==== Demo data (London area) – replace with API later ==================== */
+/* ==== Demo data (replace with API later) ================================== */
 type Pin = {
   id: string | number;
   title: string;
@@ -51,12 +50,12 @@ const DEMO_PINS: Pin[] = [
   { id: 2, title: "Lease expiring – Shoreditch", lat: 51.5262, lng: -0.0779, category: "leaseExpiring" },
   { id: 3, title: "F&B – Covent Garden", lat: 51.5129, lng: -0.1247, category: "foodBeverage" },
   { id: 4, title: "Retail – Oxford Street", lat: 51.5154, lng: -0.1410, category: "retail" },
-  { id: 5, title: "Drive-thru site – Wembley", lat: 51.5560, lng: -0.2796, category: "driveThru" },
+  { id: 5, title: "Drive-thru – Wembley", lat: 51.5560, lng: -0.2796, category: "driveThru" },
   { id: 6, title: "Shopping mall – Westfield", lat: 51.5079, lng: -0.2244, category: "shoppingMalls" },
   { id: 7, title: "New property – Battersea", lat: 51.4794, lng: -0.1447, category: "newProperties" },
 ];
 
-/* ==== Loader ============================================================= */
+/* ==== Loader ============================================================== */
 function loadGoogle(apiKey: string): Promise<typeof google> {
   if (!apiKey) return Promise.reject(new Error("Missing VITE_GOOGLE_MAPS_API_KEY"));
   if ((window as any).google?.maps) return Promise.resolve((window as any).google);
@@ -80,7 +79,7 @@ function loadGoogle(apiKey: string): Promise<typeof google> {
   });
 }
 
-/* ==== Pin icon (SVG data URL) ============================================ */
+/* ==== Pin icon (SVG) ====================================================== */
 function svgPin(color: string, label?: string): google.maps.Icon {
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="48" viewBox="0 0 34 48">
@@ -100,9 +99,11 @@ function svgPin(color: string, label?: string): google.maps.Icon {
   };
 }
 
-/* ==== Component ========================================================== */
+/* ==== Component =========================================================== */
 export default function GoogleMapsView(): JSX.Element {
   const mapRef = useRef<HTMLDivElement | null>(null);
+  const panoRef = useRef<HTMLDivElement | null>(null);
+
   const [err, setErr] = useState("");
   const [selected, setSelected] = useState<Record<CategoryKey, boolean>>({
     lateFilings: true,
@@ -123,20 +124,47 @@ export default function GoogleMapsView(): JSX.Element {
     let map: google.maps.Map | null = null;
     let markers: google.maps.Marker[] = [];
     let infowindow: google.maps.InfoWindow | null = null;
+    let panorama: google.maps.StreetViewPanorama | null = null;
+    let svService: google.maps.StreetViewService | null = null;
 
     loadGoogle(GOOGLE_KEY)
       .then((g) => {
-        if (!mapRef.current) return;
+        if (!mapRef.current || !panoRef.current) return;
 
+        // Map
         map = new g.maps.Map(mapRef.current, {
           center: { lat: 51.5074, lng: -0.1278 }, // London
-          zoom: 10,
+          zoom: 11,
           mapTypeControl: false,
           fullscreenControl: true,
-          streetViewControl: true, // keep for step B
+          streetViewControl: false, // we manage our own split panel
         });
 
+        // Street View (right panel)
+        panorama = new g.maps.StreetViewPanorama(panoRef.current, {
+          addressControl: false,
+          linksControl: true,
+          panControl: false,
+          fullscreenControl: true,
+          motionTracking: false,
+          visible: false, // only show after a pin click with coverage
+        });
+
+        svService = new g.maps.StreetViewService();
         infowindow = new g.maps.InfoWindow();
+
+        function openStreetViewAt(latLng: google.maps.LatLngLiteral) {
+          if (!svService || !panorama) return;
+          svService.getPanorama({ location: latLng, radius: 50 }, (data, status) => {
+            if (status === g.maps.StreetViewStatus.OK && data && data.location) {
+              panorama!.setPano(data.location.pano);
+              panorama!.setPov({ heading: 0, pitch: 0 });
+              panorama!.setVisible(true); // show panel
+            } else {
+              panorama!.setVisible(false); // hide if no coverage
+            }
+          });
+        }
 
         function draw() {
           markers.forEach(m => m.setMap(null));
@@ -149,35 +177,37 @@ export default function GoogleMapsView(): JSX.Element {
               icon: svgPin(CATEGORY_COLOR[p.category]),
               map,
             });
+
             m.addListener("click", () => {
+              const latLng = { lat: p.lat, lng: p.lng };
               infowindow!.setContent(
-                `<div style="min-width:220px">
+                `<div style="min-width:240px">
                   <div style="font-weight:700;margin-bottom:4px">${p.title}</div>
-                  <div style="opacity:.8">${CATEGORY_LABEL[p.category]}</div>
+                  <div style="opacity:.8;margin-bottom:6px">${CATEGORY_LABEL[p.category]}</div>
+                  <div style="opacity:.75;font-size:12px">Click opened Street View →</div>
                 </div>`
               );
               infowindow!.open({ map: map!, anchor: m });
+              openStreetViewAt(latLng);
+              map!.panTo(latLng);
             });
+
             markers.push(m);
           });
         }
 
         draw();
 
-        const sync = () => draw();
-        const obs = new MutationObserver(() => {});
-        // Not observing; but keeping pattern if future DOM toggles are used.
         return () => {
           markers.forEach(m => m.setMap(null));
           markers = [];
           infowindow?.close();
-          obs.disconnect();
+          panorama?.setVisible(false);
         };
       })
       .catch((e) => setErr(e.message || String(e)));
 
     return () => {
-      // on unmount
       map = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -237,7 +267,6 @@ export default function GoogleMapsView(): JSX.Element {
                 : "0 0 0 1px rgba(255,255,255,0.12) inset",
             }}
           >
-            {/* color dot + label */}
             <span
               style={{
                 display: "inline-block",
@@ -259,25 +288,29 @@ export default function GoogleMapsView(): JSX.Element {
         </span>
       </div>
 
-      {/* Active categories indicator */}
-      <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 8 }}>
-        Active: {activeCategories.length} / 7
-      </div>
-
-      {/* Map */}
+      {/* Split layout: Map (left) + Street View (right) */}
       <div
-        ref={mapRef}
         style={{
-          height: "70vh",
-          minHeight: 420,
-          width: "100%",
-          borderRadius: 12,
-          overflow: "hidden",
-          boxShadow:
-            "0 1px 0 rgba(0,0,0,.25), 0 0 10px rgba(47,255,209,.20), 0 0 24px rgba(47,255,209,.14)",
-          border: "1px solid rgba(255,255,255,0.08)",
+          display: "grid",
+          gridTemplateColumns: "1fr",
+          gap: 12,
         }}
-      />
-    </section>
-  );
-}
+      >
+        {/* responsive: stack on small, split on >= 1024px */}
+        <style>{`
+          @media (min-width: 1024px) {
+            .split-panels { grid-template-columns: 65% 35%; }
+          }
+        `}</style>
+
+        <div className="split-panels" style={{ display: "grid", gap: 12 }}>
+          <div
+            ref={mapRef}
+            style={{
+              height: "60vh",
+              minHeight: 360,
+              width: "100%",
+              borderRadius: 12,
+              overflow: "hidden",
+              boxShadow:
+                "0 1px 0 rgba(0,0,0,.25), 0 0 10px rgba(47,255,209,.20), 0 0 24px rgba(47,255,209,.14)",
