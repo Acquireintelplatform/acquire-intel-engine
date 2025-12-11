@@ -136,38 +136,48 @@ export default function RequirementsView(): JSX.Element {
     } catch (e: any) { setCsvOk(false); warn(e.message || "CSV upload failed"); }
   }
 
-  /* Premium look: strict inline buttons with guaranteed spacing */
-  const btnBase = "ai-btn inline-flex items-center justify-center rounded-md text-sm font-semibold transition shadow-sm";
-  const btnPrimary = `${btnBase} px-3 h-9 hover:opacity-90 active:opacity-80`;
-  const btnGhost = `${btnBase} px-3 h-9 border border-white/20 hover:bg-white/5`;
+  // Inline styles (cannot be overridden by your global CSS)
+  const btnCommon: React.CSSProperties = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 36,
+    padding: "0 12px",
+    borderRadius: 10,
+    fontSize: 14,
+    fontWeight: 600,
+    boxShadow: "0 1px 0 rgba(0,0,0,.15)",
+  };
+  const btnPrimary: React.CSSProperties = {
+    ...btnCommon,
+    background: "#2fffd1",
+    color: "#0b1220",
+  };
+  const btnGhost: React.CSSProperties = {
+    ...btnCommon,
+    background: "transparent",
+    color: "inherit",
+    border: "1px solid rgba(255,255,255,.2)",
+  };
 
   return (
     <div className="space-y-6">
-      <style>{`
-        .ai-btn { width: auto !important; }
-        .ai-card { background: rgba(255,255,255,0.02); border-color: rgba(255,255,255,0.08); }
-        .ai-hdr { letter-spacing: .2px; }
-        .ai-buttongrp { display: grid; grid-auto-flow: column; gap: 12px; align-items: center; }
-      `}</style>
-
       {/* Upload */}
-      <section className="ai-card rounded-2xl border p-5 space-y-3">
+      <section className="rounded-2xl border p-5 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="ai-hdr text-xl font-semibold">Upload Requirements (PDF or CSV)</h2>
+          <h2 className="text-xl font-semibold">Upload Requirements (PDF or CSV)</h2>
           {csvOk && <span className="text-green-500 text-xs">✅ CSV uploaded</span>}
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <input type="file" className="text-sm" onChange={e => { const f = e.target.files?.[0]; if (f) onCsv(f); }} />
-          <button type="button" className={btnPrimary} style={{ background: "#2fffd1", color: "#0b1220" }}>
-            Upload &amp; Process
-          </button>
+          <button type="button" style={btnPrimary}>Upload &amp; Process</button>
         </div>
       </section>
 
       {/* Form */}
-      <section className="ai-card rounded-2xl border p-5 space-y-3">
+      <section className="rounded-2xl border p-5 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="ai-hdr text-xl font-semibold">
+          <h2 className="text-xl font-semibold">
             {editingId != null ? "Edit Requirement" : "Add Requirement Manually"}
           </h2>
           {editingId != null && (
@@ -201,12 +211,12 @@ export default function RequirementsView(): JSX.Element {
             <input className="w-full border rounded-md px-2 py-1.5 text-sm bg-transparent"
               value={form.notes ?? ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
           </div>
-          <div className="md:col-span-4 ai-buttongrp">
-            <button type="submit" className={btnPrimary} style={{ background: "#2fffd1", color: "#0b1220" }}>
+          <div className="md:col-span-4" style={{ display: "grid", gridAutoFlow: "column", columnGap: 12, justifyContent: "start" }}>
+            <button type="submit" style={btnPrimary}>
               {editingId != null ? "Update Requirement" : "Save Requirement"}
             </button>
             {editingId != null && (
-              <button type="button" className={btnGhost} onClick={() => { setEditingId(null); setEditingLabel(""); setForm(empty); }}>
+              <button type="button" style={btnGhost} onClick={() => { setEditingId(null); setEditingLabel(""); setForm(empty); }}>
                 Cancel Edit
               </button>
             )}
@@ -215,12 +225,10 @@ export default function RequirementsView(): JSX.Element {
       </section>
 
       {/* Table */}
-      <section className="ai-card rounded-2xl border p-5 space-y-3">
+      <section className="rounded-2xl border p-5 space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="ai-hdr text-xl font-semibold">Recent Manual Entries</h2>
-          <button type="button" className={btnPrimary} style={{ background: "#2fffd1", color: "#0b1220" }} onClick={refresh}>
-            Refresh
-          </button>
+          <h2 className="text-xl font-semibold">Recent Manual Entries</h2>
+          <button type="button" style={btnPrimary} onClick={refresh}>Refresh</button>
         </div>
         <div className="text-xs opacity-70">Total: {total}</div>
 
@@ -249,16 +257,11 @@ export default function RequirementsView(): JSX.Element {
                     <div className="whitespace-pre-wrap break-words max-w-xs md:max-w-sm">{r.notes ?? "—"}</div>
                   </td>
                   <td className="p-3 border-b border-white/10 whitespace-nowrap">
-                    <div className="ai-buttongrp">
-                      <button type="button" className={btnGhost} onClick={() => onEdit(r, i)} title="Edit">Edit</button>
+                    {/* HARD GAP: inline grid ensures 12px gap that global CSS cannot override */}
+                    <div style={{ display: "grid", gridAutoFlow: "column", columnGap: 12, alignItems: "center" }}>
+                      <button type="button" style={btnGhost} onClick={() => onEdit(r, i)} title="Edit">Edit</button>
                       {r.id != null && (
-                        <button
-                          type="button"
-                          className={btnPrimary}
-                          style={{ background: "#2fffd1", color: "#0b1220" }}
-                          onClick={() => onDelete(r.id!)}
-                          title="Delete"
-                        >
+                        <button type="button" style={btnPrimary} onClick={() => onDelete(r.id!)} title="Delete">
                           Delete
                         </button>
                       )}
