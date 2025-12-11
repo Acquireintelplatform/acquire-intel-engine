@@ -18,12 +18,10 @@
   font-weight: 700 !important;
   letter-spacing: .2px !important;
   user-select: none !important;
-
   background: transparent !important;
   color: #E7FEF9 !important;
   border: 1px solid rgba(47,255,209,0.35) !important;
   box-shadow: 0 0 0 1px rgba(47,255,209,0.22) inset, var(--glow) !important;
-
   transition: transform .06s ease, opacity .15s ease, box-shadow .15s ease, background .15s ease, color .15s ease !important;
   width: auto !important;
 }
@@ -31,13 +29,13 @@
 .brand-btn:active { transform: translateY(1px) !important; }
 .brand-btn[disabled] { opacity: .6 !important; cursor: not-allowed !important; }
 
-/* Keep inputs and file pickers untouched */
+/* Inputs/file pickers */
 input[type="file"] { all: revert; }
 
-/* HIDE legacy white page titles injected by old wrappers */
+/* Remove legacy white h1s */
 main > h1:first-of-type { display: none !important; }
 
-/* Premium teal section titles */
+/* Section titles */
 .brand-title {
   color: var(--teal) !important;
   font-weight: 800 !important;
@@ -47,7 +45,7 @@ main > h1:first-of-type { display: none !important; }
   margin: 0 0 8px 0 !important;
 }
 
-/* If any button was marked as "primary", keep the same outline (uniform) */
+/* Keep uniform outline even if marked primary */
 .brand-btn[data-variant="primary"] {
   background: transparent !important;
   color: #E7FEF9 !important;
@@ -55,8 +53,5 @@ main > h1:first-of-type { display: none !important; }
   box-shadow: 0 0 0 1px rgba(47,255,209,0.22) inset, var(--glow) !important;
 }
 
-/* ===== Hide the extra System Health nav item (any route variant) ===== */
-a[href="/health"],
-a[href="/system-health"] {
-  display: none !important;
-}
+/* HIDE duplicate nav item: Map Insights */
+a[href="/map-insights"] { display: none !important; }
