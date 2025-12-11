@@ -27,8 +27,9 @@ function toArray(v: any): string[] {
 }
 const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
 
+const CSV_HEADERS = ["id", "operatorId", "name", "notes", "preferredLocations", "createdAt"];
+
 function rowsToCsv(rows: Row[]): string {
-  const headers = ["id", "operatorId", "name", "notes", "preferredLocations", "createdAt"];
   const lines = rows.map(r => {
     const name = r.title ?? "";
     const locs = toArray(r.preferredLocations).join("; ");
@@ -41,7 +42,12 @@ function rowsToCsv(rows: Row[]): string {
       r.createdAt ?? ""
     ].map(v => esc(String(v))).join(",");
   });
-  return [headers.join(","), ...lines].join("\r\n");
+  return [CSV_HEADERS.join(","), ...lines].join("\r\n");
+}
+
+function templateCsv(): string {
+  // Header-only template (no rows)
+  return CSV_HEADERS.join(",") + "\r\n";
 }
 
 function downloadCsvFile(filename: string, csv: string) {
@@ -182,6 +188,12 @@ export default function RequirementsView(): JSX.Element {
     inform("CSV downloaded");
   }
 
+  function onDownloadTemplate() {
+    const csv = templateCsv();
+    downloadCsvFile("operators_template.csv", csv);
+    inform("Template downloaded");
+  }
+
   return (
     <div className="space-y-6">
       {/* Upload */}
@@ -207,6 +219,9 @@ export default function RequirementsView(): JSX.Element {
           />
           <Pill primary>Upload &amp; Process</Pill>
           <Pill onClick={onDownloadCsv} title="Download all requirements as CSV">Download CSV</Pill>
+          <Pill onClick={onDownloadTemplate} title="Download empty CSV template with correct headers">
+            Download CSV Template
+          </Pill>
         </div>
       </Card>
 
