@@ -17,7 +17,7 @@ const API_BASE: string =
 const GOOGLE_KEY: string =
   (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY || "";
 
-/* premium button class already defined globally */
+/* use your global premium button class */
 const btnClass = "brand-btn";
 
 /* Google Geocoding -> lat/lng */
@@ -198,9 +198,9 @@ const th: React.CSSProperties = {
   background: "rgba(8,14,20,0.66)",
   backdropFilter: "blur(4px)",
 };
-
 const thRight: React.CSSProperties = { ...th, textAlign: "right" };
-
-const td: React.CSSProperties = {
-  padding: "12px",
-  ve
+const td: React.CSSProperties = { padding: "12px", verticalAlign: "top" };
+const tdMono: React.CSSProperties = {
+  ...td,
+  fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+};
