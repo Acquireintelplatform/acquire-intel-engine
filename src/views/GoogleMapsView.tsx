@@ -7,9 +7,7 @@ import {
   Autocomplete,
 } from "@react-google-maps/api";
 
-/**
- * WHY: Keep the exact 7 categories in API/UX, but show human labels in chips.
- */
+/** Keep the exact 7 categories */
 type Category =
   | "lateFilings"
   | "leaseExpiring"
@@ -76,20 +74,8 @@ function iconFor(category: Category): google.maps.Symbol {
   };
 }
 
-const mapContainerStyle: React.CSSProperties = {
-  width: "100%",
-  height: "calc(100vh - 80px)",
-};
-
-const panelWrapStyle: React.CSSProperties = {
-  position: "absolute",
-  top: 14,
-  left: "50%",
-  transform: "translateX(-50%)",
-  zIndex: 5,
-  width: "min(1100px, calc(100% - 32px))",
-};
-
+/** Layout: panel (normal flow) + map below */
+const pageWrap: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 12, padding: 16 };
 const panelStyle: React.CSSProperties = {
   background: "linear-gradient(180deg, rgba(7,20,24,0.98), rgba(7,20,24,0.92))",
   border: "1px solid rgba(0,255,255,0.18)",
@@ -97,22 +83,9 @@ const panelStyle: React.CSSProperties = {
   padding: 16,
   boxShadow: "0 18px 60px rgba(0,0,0,0.35)",
 };
-
-const rowStyle: React.CSSProperties = {
-  display: "flex",
-  gap: 12,
-  flexWrap: "wrap",
-  alignItems: "center",
-};
-
-const titleStyle: React.CSSProperties = {
-  fontSize: 28,
-  fontWeight: 800,
-  color: "#e6ffff",
-  margin: "0 0 10px 0",
-};
-
-const buttonStyle: React.CSSProperties = {
+const titleStyle: React.CSSProperties = { fontSize: 28, fontWeight: 800, color: "#e6ffff", margin: 0 };
+const row: React.CSSProperties = { display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" };
+const actionBtn: React.CSSProperties = {
   padding: "10px 14px",
   borderRadius: 14,
   border: "1px solid rgba(0,255,255,0.25)",
@@ -121,8 +94,7 @@ const buttonStyle: React.CSSProperties = {
   fontWeight: 700,
   cursor: "pointer",
 };
-
-const chipStyle = (active: boolean): React.CSSProperties => ({
+const chip = (active: boolean): React.CSSProperties => ({
   padding: "8px 14px",
   borderRadius: 999,
   border: "1px solid rgba(0,255,255,0.20)",
@@ -133,8 +105,7 @@ const chipStyle = (active: boolean): React.CSSProperties => ({
   letterSpacing: 0.2,
   cursor: "pointer",
 });
-
-const searchInputStyle: React.CSSProperties = {
+const searchInput: React.CSSProperties = {
   width: "100%",
   background: "#0f1418",
   color: "#e6f6f5",
@@ -144,6 +115,7 @@ const searchInputStyle: React.CSSProperties = {
   outline: "none",
   boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
 };
+const mapContainer: React.CSSProperties = { width: "100%", height: "calc(100vh - 220px)" }; // leaves space for panel
 
 const defaultCenter = { lat: 51.5074, lng: -0.1278 };
 const defaultZoom = 10;
@@ -159,9 +131,7 @@ export default function GoogleMapsView(): JSX.Element {
   const autoRef = useRef<google.maps.places.Autocomplete | null>(null);
 
   const [pins, setPins] = useState<Pin[]>([]);
-  const [selectedCats, setSelectedCats] = useState<Set<Category>>(
-    () => new Set(CATEGORIES),
-  );
+  const [selectedCats, setSelectedCats] = useState<Set<Category>>(new Set(CATEGORIES));
 
   const [modalOpen, setModalOpen] = useState(false);
   const [pendingLatLng, setPendingLatLng] = useState<{ lat: number; lng: number } | null>(null);
@@ -172,23 +142,15 @@ export default function GoogleMapsView(): JSX.Element {
   const fetchPins = useCallback(async () => {
     const res = await fetch(`${API_BASE_URL}/api/mapPins`, { credentials: "omit" });
     const data = await res.json();
-    if (data?.ok && Array.isArray(data.pins)) {
-      setPins(data.pins as Pin[]);
-    }
+    if (data?.ok && Array.isArray(data.pins)) setPins(data.pins as Pin[]);
   }, []);
 
-  useEffect(() => {
-    fetchPins().catch(() => void 0);
-  }, [fetchPins]);
+  useEffect(() => { fetchPins().catch(() => void 0); }, [fetchPins]);
 
-  const onMapLoad = useCallback((map: google.maps.Map) => {
-    mapRef.current = map;
-  }, []);
+  const onMapLoad = useCallback((map: google.maps.Map) => { mapRef.current = map; }, []);
 
   const onPlaceChanged = useCallback(() => {
-    const auto = autoRef.current;
-    if (!auto) return;
-    const place = auto.getPlace();
+    const place = autoRef.current?.getPlace();
     if (!place?.geometry?.location) return;
     const loc = place.geometry.location;
     mapRef.current?.panTo({ lat: loc.lat(), lng: loc.lng() });
@@ -206,27 +168,21 @@ export default function GoogleMapsView(): JSX.Element {
     });
   }, []);
 
-  const onMapClick = useCallback(
-    async (e: google.maps.MapMouseEvent) => {
-      if (!e.latLng) return;
-      const lat = e.latLng.lat();
-      const lng = e.latLng.lng();
-      setPendingLatLng({ lat, lng });
-      setFormTitle("");
-      setFormType("retail");
-      const guessed = await reverseGeocode(lat, lng).catch(() => "");
-      setFormAddress(guessed || "");
-      setModalOpen(true);
-    },
-    [reverseGeocode],
-  );
+  const onMapClick = useCallback(async (e: google.maps.MapMouseEvent) => {
+    if (!e.latLng) return;
+    const lat = e.latLng.lat();
+    const lng = e.latLng.lng();
+    setPendingLatLng({ lat, lng });
+    setFormTitle("");
+    setFormType("retail");
+    const guessed = await reverseGeocode(lat, lng).catch(() => "");
+    setFormAddress(guessed || "");
+    setModalOpen(true);
+  }, [reverseGeocode]);
 
   const onSavePin = useCallback(async () => {
     if (!pendingLatLng) return;
-    if (!formTitle.trim()) {
-      alert("Title is required.");
-      return;
-    }
+    if (!formTitle.trim()) { alert("Title is required."); return; }
     const body = {
       title: formTitle.trim(),
       type: formType,
@@ -256,91 +212,77 @@ export default function GoogleMapsView(): JSX.Element {
   const toggleCategory = useCallback((cat: Category) => {
     setSelectedCats((prev) => {
       const next = new Set(prev);
-      if (next.has(cat)) next.delete(cat);
-      else next.add(cat);
+      if (next.has(cat)) next.delete(cat); else next.add(cat);
       return next;
     });
   }, []);
-
   const showAll = useCallback(() => setSelectedCats(new Set(CATEGORIES)), []);
   const hideAll = useCallback(() => setSelectedCats(new Set()), []);
 
-  const filteredPins = useMemo(
-    () => pins.filter((p) => selectedCats.has(p.type)),
-    [pins, selectedCats],
-  );
+  const filteredPins = useMemo(() => pins.filter((p) => selectedCats.has(p.type)), [pins, selectedCats]);
 
   if (loadError) return <div style={{ padding: 24 }}>Failed to load Google Maps.</div>;
   if (!isLoaded) return <div style={{ padding: 24 }}>Loading map…</div>;
 
   return (
-    <div style={{ position: "relative" }}>
-      {/* PREMIUM CONTROL PANEL (matches your older layout) */}
-      <div style={panelWrapStyle}>
-        <div className="teal-glow" style={panelStyle}>
-          <div style={titleStyle}>Google Maps Engine</div>
+    <div style={pageWrap}>
+      {/* PANEL ABOVE MAP */}
+      <div className="teal-glow" style={panelStyle}>
+        <h2 style={titleStyle}>Google Maps Engine</h2>
 
-          {/* Top action buttons */}
-          <div style={{ ...rowStyle, marginBottom: 12 }}>
-            <button
-              type="button"
-              className="teal-glow"
-              style={buttonStyle}
-              // NOTE: Map click opens the modal; this button is a hint-only.
-              onClick={() => alert("Tip: Click anywhere on the map to place a pin.")}
-            >
-              Click map to place…
-            </button>
-            <button
-              type="button"
-              className="teal-glow"
-              style={buttonStyle}
-              onClick={() => fetchPins()}
-            >
-              Refresh
-            </button>
-            <button type="button" className="teal-glow" style={buttonStyle} onClick={showAll}>
-              Show all
-            </button>
-            <button type="button" className="teal-glow" style={buttonStyle} onClick={hideAll}>
-              Hide all
-            </button>
-          </div>
+        <div style={{ ...row, marginTop: 10 }}>
+          <button
+            type="button"
+            className="teal-glow"
+            style={actionBtn}
+            onClick={() => alert("Tip: Click anywhere on the map to place a pin.")}
+          >
+            Click map to place…
+          </button>
+          <button type="button" className="teal-glow" style={actionBtn} onClick={() => fetchPins()}>
+            Refresh
+          </button>
+          <button type="button" className="teal-glow" style={actionBtn} onClick={showAll}>
+            Show all
+          </button>
+          <button type="button" className="teal-glow" style={actionBtn} onClick={hideAll}>
+            Hide all
+          </button>
+        </div>
 
-          {/* Category chips */}
-          <div style={{ ...rowStyle, marginBottom: 12 }}>
-            {CATEGORIES.map((cat) => {
-              const active = selectedCats.has(cat);
-              return (
-                <button
-                  key={cat}
-                  type="button"
-                  className="teal-glow"
-                  onClick={() => toggleCategory(cat)}
-                  style={chipStyle(active)}
-                >
-                  {CATEGORY_LABEL[cat]}
-                </button>
-              );
-            })}
-          </div>
+        <div style={{ ...row, marginTop: 12 }}>
+          {CATEGORIES.map((cat) => {
+            const active = selectedCats.has(cat);
+            return (
+              <button
+                key={cat}
+                type="button"
+                className="teal-glow"
+                onClick={() => toggleCategory(cat)}
+                style={chip(active)}
+              >
+                {CATEGORY_LABEL[cat]}
+              </button>
+            );
+          })}
+        </div>
 
-          {/* Search input (full width row, below chips) */}
+        <div style={{ marginTop: 12 }}>
           <Autocomplete onLoad={(a) => (autoRef.current = a)} onPlaceChanged={onPlaceChanged}>
             <input
               placeholder="Search address, store, postcode…"
-              style={searchInputStyle}
+              style={searchInput}
               aria-label="Search places"
             />
           </Autocomplete>
         </div>
       </div>
 
-      {/* MAP */}
+      {/* MAP BELOW PANEL */}
       <GoogleMap
         onLoad={onMapLoad}
         onClick={onMapClick}
-        mapContainerStyle={mapContainerStyle}
+        mapContainerStyle={mapContainer}
         center={defaultCenter}
         zoom={defaultZoom}
         options={{
@@ -486,10 +428,7 @@ export default function GoogleMapsView(): JSX.Element {
               <button
                 type="button"
                 className="teal-glow"
-                onClick={() => {
-                  setModalOpen(false);
-                  setPendingLatLng(null);
-                }}
+                onClick={() => { setModalOpen(false); setPendingLatLng(null); }}
                 style={{
                   padding: "10px 14px",
                   borderRadius: 12,
@@ -510,8 +449,7 @@ export default function GoogleMapsView(): JSX.Element {
                   padding: "10px 14px",
                   borderRadius: 12,
                   border: "1px solid rgba(0,255,255,0.25)",
-                  background:
-                    "linear-gradient(135deg, rgba(0,255,255,0.18), rgba(0,255,200,0.18))",
+                  background: "linear-gradient(135deg, rgba(0,255,255,0.18), rgba(0,255,200,0.18))",
                   color: "#e6fffe",
                   fontWeight: 800,
                   cursor: "pointer",
