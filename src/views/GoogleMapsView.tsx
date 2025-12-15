@@ -140,10 +140,10 @@ async function readJsonSafe(res: Response): Promise<any | null> {
         return { text: t };
       }
     }
-    return { text: t };
   } catch {
-    return null;
+    // ignore
   }
+  return null;
 }
 
 export default function GoogleMapsView(): JSX.Element {
@@ -165,33 +165,51 @@ export default function GoogleMapsView(): JSX.Element {
   const [formType, setFormType] = useState<Category>("retail");
   const [formAddress, setFormAddress] = useState("");
 
-  const [shouldFitBounds, setShouldFitBounds] = useState<boolean>(true); // fit on first load & after save/refresh
+  const [shouldFitBounds, setShouldFitBounds] = useState<boolean>(true);
+  const [health, setHealth] = useState<string>("checking…");
+  const [getStatus, setGetStatus] = useState<string>("—");
+
+  /** Health ping to confirm API base URL is reachable */
+  const fetchHealth = useCallback(async () => {
+    try {
+      setHealth("checking…");
+      const res = await fetch(`${API_BASE_URL}/api/health`, { mode: "cors" });
+      if (!res.ok) {
+        setHealth(`down (HTTP ${res.status})`);
+      } else {
+        const j = await readJsonSafe(res);
+        setHealth(j?.ok ? "ok" : "ok (no json)");
+      }
+    } catch {
+      setHealth("unreachable");
+    }
+  }, []);
 
   /** GET pins */
   const fetchPins = useCallback(async () => {
     try {
+      setGetStatus("loading…");
       const res = await fetch(`${API_BASE_URL}/api/mapPins`, { mode: "cors" });
       if (!res.ok) {
-        const payload = await readJsonSafe(res);
-        console.error("GET /api/mapPins failed", res.status, payload);
+        setGetStatus(`HTTP ${res.status}`);
         return;
       }
       const data = await readJsonSafe(res);
       const list: Pin[] =
         (data && Array.isArray((data as any).pins) && (data as any).pins) ||
         (Array.isArray(data) ? (data as Pin[]) : []);
-      if (Array.isArray(list)) {
-        setPins(list);
-        setShouldFitBounds(true); // refit to latest pins
-      }
-    } catch (err) {
-      console.error("GET /api/mapPins network error", err);
+      setPins(Array.isArray(list) ? list : []);
+      setShouldFitBounds(true);
+      setGetStatus("ok");
+    } catch {
+      setGetStatus("network error");
     }
   }, []);
 
   useEffect(() => {
+    fetchHealth().catch(() => void 0);
     fetchPins().catch(() => void 0);
-  }, [fetchPins]);
+  }, [fetchHealth, fetchPins]);
 
   /** Fit map to filtered pins when needed */
   useEffect(() => {
@@ -205,7 +223,6 @@ export default function GoogleMapsView(): JSX.Element {
     }
     const bounds = new google.maps.LatLngBounds();
     filtered.forEach((p) => bounds.extend({ lat: p.lat, lng: p.lng }));
-    // WHY: small timeout ensures map is ready before fitting (prevents fit jitter)
     setTimeout(() => {
       mapRef.current && mapRef.current.fitBounds(bounds, 60);
       setShouldFitBounds(false);
@@ -224,7 +241,7 @@ export default function GoogleMapsView(): JSX.Element {
     mapRef.current?.setZoom(14);
   }, []);
 
-  /** Reverse geocode is best-effort. If blocked by API key, we still proceed. */
+  /** Reverse geocode is best-effort (ignore failures) */
   const reverseGeocode = useCallback(async (lat: number, lng: number): Promise<string> => {
     try {
       if (!(window as any).google?.maps?.Geocoder) return "";
@@ -248,14 +265,13 @@ export default function GoogleMapsView(): JSX.Element {
       setPendingLatLng({ lat, lng });
       setFormTitle("");
       setFormType("retail");
-      // Non-blocking; if Geocoder fails due to key scope, we still open the modal.
       reverseGeocode(lat, lng).then((addr) => setFormAddress(addr || "")).catch(() => setFormAddress(""));
       setModalOpen(true);
     },
     [reverseGeocode],
   );
 
-  /** POST new pin; accept 2xx with empty/non-JSON body; then refetch and fit */
+  /** POST new pin, then refetch and fit */
   const onSavePin = useCallback(async () => {
     if (!pendingLatLng) return;
     if (!formTitle.trim()) {
@@ -288,18 +304,43 @@ export default function GoogleMapsView(): JSX.Element {
         return;
       }
 
-      // Try reading; tolerate empty or non-JSON
       await readJsonSafe(res).catch(() => null);
-
       setModalOpen(false);
       setPendingLatLng(null);
-      await fetchPins(); // refresh list
-      setShouldFitBounds(true); // auto-zoom to reveal new pin
+      await fetchPins();
+      setShouldFitBounds(true);
     } catch (err: any) {
       alert(`Network error saving pin.${err?.message ? ` ${err.message}` : ""}`);
       console.error("POST /api/mapPins network error", err);
     }
   }, [pendingLatLng, formTitle, formType, formAddress, fetchPins]);
+
+  /** Seed a demo pin (quick sanity) */
+  const seedDemoPin = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/mapPins`, {
+        method: "POST",
+        mode: "cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "Demo retail pin",
+          type: "retail",
+          address: "Trafalgar Square, London",
+          lat: 51.5080,
+          lng: -0.1281,
+        } satisfies Pin),
+      });
+      if (!res.ok) {
+        const payload = await readJsonSafe(res);
+        alert(`Seed failed: HTTP ${res.status} ${payload ? JSON.stringify(payload) : ""}`);
+        return;
+      }
+      await fetchPins();
+      setShouldFitBounds(true);
+    } catch (e: any) {
+      alert(`Seed failed: ${e?.message || "network error"}`);
+    }
+  }, [fetchPins]);
 
   const toggleCategory = useCallback((cat: Category) => {
     setSelectedCats((prev) => {
@@ -308,7 +349,7 @@ export default function GoogleMapsView(): JSX.Element {
       else next.add(cat);
       return next;
     });
-    setShouldFitBounds(true); // reframe to whatever is visible now
+    setShouldFitBounds(true);
   }, []);
   const showAll = useCallback(() => {
     setSelectedCats(new Set(CATEGORIES));
@@ -330,7 +371,7 @@ export default function GoogleMapsView(): JSX.Element {
       <div className="teal-glow" style={panelStyle}>
         <h2 style={titleStyle}>Google Maps Engine</h2>
 
-        <div style={{ ...row, marginTop: 10 }}>
+        <div style={{ ...row, marginTop: 10, alignItems: "center" }}>
           <button
             type="button"
             className="teal-glow"
@@ -356,9 +397,19 @@ export default function GoogleMapsView(): JSX.Element {
           <button type="button" className="teal-glow" style={actionBtn} onClick={hideAll}>
             Hide all
           </button>
-          <span style={infoText}>
-            Filtered {filteredPins.length} / {pins.length} pins
+          <span style={infoText}>Filtered {filteredPins.length} / {pins.length} pins</span>
+          <span style={{ ...infoText, marginLeft: 12 }}>
+            API: {health} • GET: {getStatus} • Base: {API_BASE_URL}
           </span>
+          <button
+            type="button"
+            className="teal-glow"
+            style={{ ...actionBtn, marginLeft: "auto" }}
+            onClick={seedDemoPin}
+            title="Quickly insert a demo pin to verify the pipeline"
+          >
+            Seed demo pin
+          </button>
         </div>
 
         <div style={{ ...row, marginTop: 12 }}>
