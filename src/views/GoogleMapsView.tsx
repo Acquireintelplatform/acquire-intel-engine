@@ -1,14 +1,16 @@
 // src/views/GoogleMapsView.tsx
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { GoogleMap, LoadScript, Marker } from "@react-google-maps/api";
 
-/** Keys & API base (keeps your env + fallback) */
+/** === Config (env + API base) ========================================== */
 const GOOGLE_KEY: string =
-  (import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY || "";
+  ((import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY as string) || "";
+
 const API_BASE: string =
-  (import.meta as any).env?.VITE_API_BASE_URL ||
+  ((import.meta as any).env?.VITE_API_BASE_URL as string) ||
   "https://acquire-intel-api.onrender.com";
 
-/** Categories */
+/** === Categories ======================================================== */
 type CategoryKey =
   | "lateFilings"
   | "leaseExpiring"
@@ -31,311 +33,287 @@ const CATEGORY_LABEL: Record<CategoryKey, string> = {
 const CATEGORY_COLOR: Record<CategoryKey, string> = {
   lateFilings: "#44FFD4",
   leaseExpiring: "#FFB020",
-  foodBeverage: "#B055FF",
-  retail: "#38E1A8",
-  driveThru: "#3BA3FF",
-  shoppingMalls: "#35D19A",
-  newProperties: "#FF5252",
+  foodBeverage: "#8E44FF",
+  retail: "#00A870",
+  driveThru: "#3B82F6",
+  shoppingMalls: "#10B981",
+  newProperties: "#FF5A5F",
 };
 
+const ALL_CATEGORIES: CategoryKey[] = Object.keys(CATEGORY_LABEL) as CategoryKey[];
+
+/** === Types ============================================================= */
 type Pin = {
   id: string;
+  title: string;
   type: CategoryKey;
+  address?: string;
   lat: number;
   lng: number;
-  title: string;
-  address?: string;
-  meta?: any;
   createdAt?: string;
+  meta?: any;
 };
 
-declare global {
-  interface Window {
-    google: any;
-  }
+/** === Map container/style ============================================== */
+const MAP_CONTAINER_STYLE: google.maps.MapOptions["styles"] | undefined = undefined;
+const MAP_DIMENSIONS = { width: "100%", height: "76vh" };
+
+const DEFAULT_CENTER = { lat: 51.507351, lng: -0.127758 }; // London
+
+/** Make a simple colored pin symbol */
+function makePin(color: string): google.maps.Symbol {
+  return {
+    path: google.maps.SymbolPath.CIRCLE,
+    scale: 8,
+    fillColor: color,
+    fillOpacity: 1,
+    strokeColor: "#0C1E1B",
+    strokeWeight: 2,
+  };
 }
 
-function loadGoogle(key: string) {
-  if (window.google?.maps) return Promise.resolve();
-  const id = "gmaps-sdk";
-  if (document.getElementById(id)) {
-    return new Promise<void>((res) => {
-      const ready = () => window.google?.maps && res();
-      const t = setInterval(() => {
-        if (window.google?.maps) {
-          clearInterval(t);
-          res();
-        }
-      }, 100);
-    });
-  }
-  const s = document.createElement("script");
-  s.id = id;
-  s.async = true;
-  s.defer = true;
-  s.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places`;
-  document.head.appendChild(s);
-  return new Promise<void>((res, rej) => {
-    s.onload = () => res();
-    s.onerror = rej;
-  });
-}
+/** ================================================================
+ *  Main View
+ *  ================================================================ */
+const GoogleMapsView: React.FC = () => {
+  const mapRef = useRef<google.maps.Map | null>(null);
 
-export default function GoogleMapsView(): JSX.Element {
-  const mapDivRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<any>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const markersRef = useRef<any[]>([]);
   const [pins, setPins] = useState<Pin[]>([]);
-  const [placing, setPlacing] = useState<boolean>(false);
-  const [selected, setSelected] = useState<Set<CategoryKey>>(
-    () => new Set(Object.keys(CATEGORY_LABEL) as CategoryKey[])
+  const [visibleCats, setVisibleCats] = useState<Record<CategoryKey, boolean>>(
+    () =>
+      ALL_CATEGORIES.reduce((acc, k) => {
+        acc[k] = true;
+        return acc;
+      }, {} as Record<CategoryKey, boolean>)
   );
-  const selectedArray = useMemo(() => Array.from(selected), [selected]);
 
-  /** Fetch pins */
-  const fetchPins = async () => {
+  const [search, setSearch] = useState("");
+  const [isPlacing, setIsPlacing] = useState(false);
+
+  /** Load pins from API */
+  const loadPins = useCallback(async () => {
     try {
-      const r = await fetch(`${API_BASE}/api/mapPins`, { credentials: "omit" });
-      const j = await r.json();
-      if (j?.ok && Array.isArray(j.pins)) {
-        setPins(j.pins);
+      const res = await fetch(`${API_BASE}/api/mapPins`);
+      const data = await res.json();
+      if (res.ok && data?.ok) {
+        setPins(data.pins || []);
+      } else {
+        console.error("Load pins failed:", data);
       }
     } catch (e) {
-      console.error("fetchPins failed", e);
+      console.error("Load pins error:", e);
     }
-  };
-
-  /** Post new pin */
-  const postPin = async (pin: Omit<Pin, "id">) => {
-    try {
-      const r = await fetch(`${API_BASE}/api/mapPins`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(pin),
-      });
-      const j = await r.json();
-      if (j?.ok) {
-        await fetchPins();
-      } else {
-        alert(j?.error || "Save failed");
-      }
-    } catch {
-      alert("Save failed");
-    }
-  };
-
-  /** Init map once */
-  useEffect(() => {
-    (async () => {
-      await loadGoogle(GOOGLE_KEY);
-      if (!mapDivRef.current) return;
-
-      const center = { lat: 51.5074, lng: -0.1278 }; // London default
-      mapRef.current = new window.google.maps.Map(mapDivRef.current, {
-        center,
-        zoom: 11,
-        disableDefaultUI: true,
-        styles: [
-          { featureType: "poi.business", stylers: [{ visibility: "off" }] },
-          { featureType: "transit", stylers: [{ visibility: "off" }] },
-        ],
-      });
-
-      // Places search box
-      if (searchInputRef.current) {
-        const sb = new window.google.maps.places.SearchBox(
-          searchInputRef.current
-        );
-        mapRef.current.controls[
-          window.google.maps.ControlPosition.TOP_LEFT
-        ].push(searchInputRef.current);
-
-        sb.addListener("places_changed", () => {
-          const places = sb.getPlaces();
-          if (!places || !places.length) return;
-          const bounds = new window.google.maps.LatLngBounds();
-          places.forEach((p: any) => {
-            if (p.geometry?.viewport) bounds.union(p.geometry.viewport);
-            else if (p.geometry?.location) bounds.extend(p.geometry.location);
-          });
-          mapRef.current.fitBounds(bounds);
-        });
-      }
-
-      // Click-to-place flow
-      mapRef.current.addListener("click", async (ev: any) => {
-        if (!placing) return;
-        const lat = ev.latLng.lat();
-        const lng = ev.latLng.lng();
-
-        // Simple reliable prompts
-        const title = window.prompt("Title for this marker?");
-        if (!title) return;
-        // Choose type from quick list
-        const typeChoice = window.prompt(
-          `Type (one of):\n${Object.keys(CATEGORY_LABEL).join(", ")}\n\nDefault: newProperties`
-        ) as CategoryKey | null;
-        const type =
-          (typeChoice as CategoryKey) && CATEGORY_LABEL[typeChoice as CategoryKey]
-            ? (typeChoice as CategoryKey)
-            : ("newProperties" as CategoryKey);
-
-        const address = window.prompt("Address (optional):") || "";
-
-        await postPin({ title, type, lat, lng, address });
-      });
-
-      await fetchPins();
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** Rebuild map markers when pins or selection changes */
   useEffect(() => {
-    if (!mapRef.current || !window.google?.maps) return;
+    loadPins();
+    // Expose a quick refresher in case we need it
+    (window as any).__reloadPins = loadPins;
+  }, [loadPins]);
 
-    // Clear old
-    markersRef.current.forEach((m) => m.setMap(null));
-    markersRef.current = [];
+  /** Show all / Hide all */
+  const showAll = useCallback(() => {
+    setVisibleCats(
+      ALL_CATEGORIES.reduce((acc, k) => {
+        acc[k] = true;
+        return acc;
+      }, {} as Record<CategoryKey, boolean>)
+    );
+  }, []);
 
-    const visiblePins = pins.filter((p) => selected.has(p.type));
+  const hideAll = useCallback(() => {
+    setVisibleCats(
+      ALL_CATEGORIES.reduce((acc, k) => {
+        acc[k] = false;
+        return acc;
+      }, {} as Record<CategoryKey, boolean>)
+    );
+  }, []);
 
-    visiblePins.forEach((p) => {
-      const m = new window.google.maps.Marker({
-        position: { lat: p.lat, lng: p.lng },
-        map: mapRef.current,
-        title: `${CATEGORY_LABEL[p.type]} • ${p.title}`,
-        icon: {
-          path: window.google.maps.SymbolPath.BACKWARD_CLOSED_ARROW,
-          scale: 5,
-          strokeColor: CATEGORY_COLOR[p.type],
-          fillColor: CATEGORY_COLOR[p.type],
-          fillOpacity: 1,
-          strokeWeight: 1,
-        },
-      });
+  /** Toggle a single category */
+  const toggleCat = useCallback((k: CategoryKey) => {
+    setVisibleCats((prev) => ({ ...prev, [k]: !prev[k] }));
+  }, []);
 
-      const infowindow = new window.google.maps.InfoWindow({
-        content: `
-          <div style="font-family:Inter,system-ui,-apple-system,Segoe UI;
-                      color:#e9feff">
-            <div style="font-weight:700;margin-bottom:4px">${p.title}</div>
-            <div style="opacity:.9;margin-bottom:6px">${CATEGORY_LABEL[p.type]}</div>
-            ${
-              p.address
-                ? `<div style="opacity:.8">${p.address}</div>`
-                : `<div style="opacity:.6">No address</div>`
-            }
-          </div>
-        `,
-      });
-      m.addListener("click", () => infowindow.open(mapRef.current, m));
-      markersRef.current.push(m);
-    });
-  }, [pins, selected]);
+  /** Filtered pins to render */
+  const filteredPins = useMemo(
+    () => pins.filter((p) => visibleCats[p.type]),
+    [pins, visibleCats]
+  );
 
-  /** UI helpers */
-  const togglePlacing = () => setPlacing((v) => !v);
+  /** Search → geocode → pan */
+  const onSearch = useCallback(async () => {
+    const g = (window as any).google;
+    if (!mapRef.current || !g?.maps?.Geocoder) return;
+    if (!search.trim()) return;
 
-  const toggleCategory = (k: CategoryKey) => {
-    setSelected((old) => {
-      const next = new Set(old);
-      if (next.has(k)) next.delete(k);
-      else next.add(k);
-      return next;
-    });
+    try {
+      const geocoder = new g.maps.Geocoder();
+      const res = await geocoder.geocode({ address: search.trim() });
+      const location = res?.results?.[0]?.geometry?.location;
+      if (location) {
+        mapRef.current.panTo(location);
+        mapRef.current.setZoom(15);
+      }
+    } catch (e) {
+      console.error("Geocode error:", e);
+    }
+  }, [search]);
+
+  /** Fallback, full-screen safe: prompt-based add */
+  const promptAndAddPin = useCallback(
+    async (lat: number, lng: number) => {
+      try {
+        const title = window.prompt("Pin title", "Test pin");
+        if (!title) return;
+
+        const type = (window
+          .prompt(
+            'Type (one of): lateFilings | leaseExpiring | foodBeverage | retail | driveThru | shoppingMalls | newProperties',
+            "retail"
+          )
+          ?.trim() || "") as CategoryKey;
+
+        if (!ALL_CATEGORIES.includes(type)) {
+          alert("Invalid type.");
+          return;
+        }
+
+        const address =
+          window.prompt("Address (optional)", `${lat.toFixed(6)}, ${lng.toFixed(6)}`) || "";
+
+        const res = await fetch(`${API_BASE}/api/mapPins`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, type, address, lat, lng }),
+        });
+        const data = await res.json();
+        if (!res.ok || !data?.ok) {
+          alert(`Save failed: ${data?.error || res.statusText}`);
+          return;
+        }
+        await loadPins();
+      } catch (e: any) {
+        alert(`Save failed: ${e?.message || e}`);
+      }
+    },
+    [loadPins]
+  );
+
+  /** Handle map click */
+  const onMapClick = useCallback(
+    (e: google.maps.MapMouseEvent) => {
+      if (!isPlacing) return;
+      const lat = e.latLng?.lat();
+      const lng = e.latLng?.lng();
+      if (lat != null && lng != null) {
+        // fallback prompt-add
+        promptAndAddPin(lat, lng);
+        setIsPlacing(false);
+      }
+    },
+    [isPlacing, promptAndAddPin]
+  );
+
+  const onLoadMap = (map: google.maps.Map) => {
+    mapRef.current = map;
   };
 
-  const showAll = () =>
-    setSelected(new Set(Object.keys(CATEGORY_LABEL) as CategoryKey[]));
-  const hideAll = () => setSelected(new Set());
-
-  /** Styles */
-  const pill = (active = true) =>
-    `inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold
-     ${active ? "bg-[#14ffd11f] hover:bg-[#14ffd12a]" : "bg-[#0e2a34] opacity-70"}
-     border border-[#2fffd1]/30 shadow-[0_0_0_1px_rgba(20,255,209,.1),0_0_18px_rgba(20,255,209,.12)]
-     transition`;
+  /** Render buttons (compact) */
+  const Button: React.FC<
+    React.PropsWithChildren<{ onClick?: () => void; active?: boolean }>
+  > = ({ onClick, active, children }) => (
+    <button
+      onClick={onClick}
+      className="rounded-xl px-4 py-2 mx-1 my-1 text-sm font-semibold shadow-[0_1px_0_rgba(0,0,0,.25),0_0_10px_rgba(47,255,209,.20),0_0_24px_rgba(47,255,209,.14)]"
+      style={{
+        background: active ? "rgba(47,255,209,0.18)" : "rgba(47,255,209,0.10)",
+        border: "1px solid rgba(47,255,209,0.35)",
+        color: "#B9FFF2",
+      }}
+    >
+      {children}
+    </button>
+  );
 
   return (
-    <div className="p-6">
-      {/* Search + controls */}
-      <div className="mb-3 flex flex-wrap gap-3 items-center">
-        <button className={pill(placing)} onClick={togglePlacing}>
-          {placing ? "Click map to place…" : "Click map to place…"}
-        </button>
-        <button className={pill()} onClick={fetchPins}>
-          Refresh
-        </button>
-        <button className={pill()} onClick={showAll}>
-          Show all
-        </button>
-        <button className={pill()} onClick={hideAll}>
-          Hide all
-        </button>
+    <div className="px-4 pb-8">
+      <h1 className="text-3xl font-semibold mb-4">Google Maps Engine</h1>
+
+      <div className="flex flex-wrap items-center mb-3">
+        <Button onClick={() => setIsPlacing((s) => !s)} active={isPlacing}>
+          Click map to place…
+        </Button>
+        <Button onClick={loadPins}>Refresh</Button>
+        <Button onClick={showAll}>Show all</Button>
+        <Button onClick={hideAll}>Hide all</Button>
       </div>
 
-      <div className="mb-3 flex flex-wrap gap-2">
-        {(Object.keys(CATEGORY_LABEL) as CategoryKey[]).map((k) => (
-          <button
-            key={k}
-            className={pill(selected.has(k))}
-            onClick={() => toggleCategory(k)}
-            title={CATEGORY_LABEL[k]}
-          >
+      <div className="flex flex-wrap items-center mb-3">
+        {ALL_CATEGORIES.map((k) => (
+          <Button key={k} onClick={() => toggleCat(k)} active={visibleCats[k]}>
             <span
-              style={{
-                display: "inline-block",
-                width: 10,
-                height: 10,
-                borderRadius: 9999,
-                background: CATEGORY_COLOR[k],
-              }}
+              className="inline-block w-2.5 h-2.5 rounded-full mr-2 align-[2px]"
+              style={{ background: CATEGORY_COLOR[k] }}
             />
             {CATEGORY_LABEL[k]}
-          </button>
+          </Button>
         ))}
       </div>
 
-      {/* Map container */}
-      <div className="relative rounded-2xl overflow-hidden ring-1 ring-[#2fffd1]/25 shadow-[0_0_0_1px_rgba(20,255,209,.08),0_0_30px_rgba(20,255,209,.15)]">
-        {/* Search input pinned to map (styled, opaque, readable) */}
+      <div className="mb-3">
         <input
-          ref={searchInputRef}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && onSearch()}
           placeholder="Search address, store, postcode…"
-          className="absolute z-[5] top-3 left-3 px-4 py-2 rounded-xl outline-none"
+          className="w-full max-w-xl rounded-xl px-4 py-3"
           style={{
-            background: "#07232b",
-            border: "1px solid rgba(47,255,209,.35)",
-            color: "#e9feff",
-            width: 320,
+            background: "rgba(9, 30, 27, 0.9)",
+            color: "#DFFCF6",
+            border: "1px solid rgba(47,255,209,.28)",
             boxShadow:
-              "0 0 0 1px rgba(20,255,209,.08), 0 0 16px rgba(20,255,209,.14)",
+              "0 1px 0 rgba(0,0,0,.25), 0 0 10px rgba(47,255,209,.20), 0 0 24px rgba(47,255,209,.14)",
           }}
         />
-
-        <div ref={mapDivRef} style={{ width: "100%", height: "74vh" }} />
       </div>
 
-      {/* Map + PAC (autocomplete) theming */}
-      <style>{`
-        .pac-target-input,
-        .pac-target-input:focus {
-          background: #07232b !important;
-          color: #e9feff !important;
-          border: 1px solid rgba(47,255,209,.35) !important;
-        }
-        .pac-container {
-          background: #061e26 !important;
-          color: #e9feff !important;
-          border: 1px solid rgba(47,255,209,.25);
-          box-shadow: 0 0 24px rgba(47,255,209,.14) !important;
-        }
-        .pac-item { color:#e9feff !important; }
-        .pac-item:hover { background:#0c2b35 !important; }
-        .pac-item-query { color:#a9ffef !important; }
-      `}</style>
+      <div
+        className="rounded-2xl overflow-hidden"
+        style={{
+          border: "1px solid rgba(47,255,209,.28)",
+          boxShadow:
+            "0 1px 0 rgba(0,0,0,.25), 0 0 10px rgba(47,255,209,.20), 0 0 24px rgba(47,255,209,.14)",
+        }}
+      >
+        <LoadScript googleMapsApiKey={GOOGLE_KEY} libraries={["places"]}>
+          <GoogleMap
+            mapContainerStyle={MAP_DIMENSIONS}
+            center={DEFAULT_CENTER}
+            zoom={12}
+            options={{
+              styles: MAP_CONTAINER_STYLE,
+              streetViewControl: true,
+              fullscreenControl: true,
+              mapTypeControl: false,
+              clickableIcons: true,
+            }}
+            onClick={onMapClick}
+            onLoad={onLoadMap}
+          >
+            {filteredPins.map((p) => (
+              <Marker
+                key={p.id}
+                position={{ lat: p.lat, lng: p.lng }}
+                title={`${p.title} — ${CATEGORY_LABEL[p.type]}`}
+                icon={makePin(CATEGORY_COLOR[p.type])}
+              />
+            ))}
+          </GoogleMap>
+        </LoadScript>
+      </div>
     </div>
   );
-}
+};
+
+export default GoogleMapsView;
