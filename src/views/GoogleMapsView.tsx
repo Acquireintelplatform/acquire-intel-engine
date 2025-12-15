@@ -1,11 +1,6 @@
 // src/views/GoogleMapsView.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  GoogleMap,
-  useJsApiLoader,
-  Marker,
-  Autocomplete,
-} from "@react-google-maps/api";
+import { GoogleMap, useJsApiLoader, Marker, Autocomplete } from "@react-google-maps/api";
 
 type Category =
   | "lateFilings"
@@ -48,7 +43,6 @@ const CATEGORY_LABEL: Record<Category, string> = {
   newProperties: "New properties",
 };
 
-// Distinct colours per category (visible on map)
 const CATEGORY_COLOR: Record<Category, string> = {
   lateFilings: "#0dd3d3",
   leaseExpiring: "#00c2a8",
@@ -63,7 +57,6 @@ const PIN_PATH =
   "M12 2C7.6 2 4 5.6 4 10c0 5.6 8 12 8 12s8-6.4 8-12c0-4.4-3.6-8-8-8zm0 10.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z";
 
 function iconFor(category: Category): google.maps.Symbol {
-  // WHY: forces coloured symbol per category; avoids default red pin
   return {
     path: PIN_PATH as any,
     fillColor: CATEGORY_COLOR[category],
@@ -75,13 +68,8 @@ function iconFor(category: Category): google.maps.Symbol {
   };
 }
 
-const pageWrap: React.CSSProperties = {
-  display: "flex",
-  flexDirection: "column",
-  gap: 12,
-  padding: 16,
-};
-
+// Layout tokens
+const pageWrap: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 12, padding: 16 };
 const panelStyle: React.CSSProperties = {
   background: "linear-gradient(180deg, rgba(7,20,24,0.98), rgba(7,20,24,0.92))",
   border: "1px solid rgba(0,255,255,0.18)",
@@ -89,21 +77,8 @@ const panelStyle: React.CSSProperties = {
   padding: 16,
   boxShadow: "0 18px 60px rgba(0,0,0,0.35)",
 };
-
-const titleStyle: React.CSSProperties = {
-  fontSize: 28,
-  fontWeight: 800,
-  color: "#e6ffff",
-  margin: 0,
-};
-
-const row: React.CSSProperties = {
-  display: "flex",
-  gap: 12,
-  flexWrap: "wrap",
-  alignItems: "center",
-};
-
+const titleStyle: React.CSSProperties = { fontSize: 28, fontWeight: 800, color: "#e6ffff", margin: 0 };
+const row: React.CSSProperties = { display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" };
 const actionBtn: React.CSSProperties = {
   padding: "10px 14px",
   borderRadius: 14,
@@ -113,7 +88,6 @@ const actionBtn: React.CSSProperties = {
   fontWeight: 700,
   cursor: "pointer",
 };
-
 const chip = (active: boolean): React.CSSProperties => ({
   padding: "8px 14px",
   borderRadius: 999,
@@ -125,7 +99,6 @@ const chip = (active: boolean): React.CSSProperties => ({
   letterSpacing: 0.2,
   cursor: "pointer",
 });
-
 const searchInput: React.CSSProperties = {
   width: "100%",
   background: "#0f1418",
@@ -136,14 +109,39 @@ const searchInput: React.CSSProperties = {
   outline: "none",
   boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
 };
-
-const mapContainer: React.CSSProperties = {
-  width: "100%",
-  height: "calc(100vh - 220px)", // leaves space for panel
-};
+const mapContainer: React.CSSProperties = { width: "100%", height: "calc(100vh - 220px)" };
 
 const defaultCenter = { lat: 51.5074, lng: -0.1278 };
 const defaultZoom = 10;
+
+// Safe response readers for mixed backends (JSON / text / empty)
+async function readJsonSafe(res: Response): Promise<any | null> {
+  const ct = res.headers.get("content-type") || "";
+  const len = res.headers.get("content-length");
+  // If no content-length and no chunked JSON header, try text then JSON
+  if (!ct || Number(len) === 0 || res.status === 204) return null;
+  if (ct.includes("application/json")) {
+    try {
+      return await res.json();
+    } catch {
+      return null;
+    }
+  }
+  try {
+    const t = await res.text();
+    // Attempt to parse if it looks like JSON, else return as text blob
+    if (t && t.trim().startsWith("{")) {
+      try {
+        return JSON.parse(t);
+      } catch {
+        return { text: t };
+      }
+    }
+    return { text: t };
+  } catch {
+    return null;
+  }
+}
 
 export default function GoogleMapsView(): JSX.Element {
   const { isLoaded, loadError } = useJsApiLoader({
@@ -168,12 +166,16 @@ export default function GoogleMapsView(): JSX.Element {
     try {
       const res = await fetch(`${API_BASE_URL}/api/mapPins`, { mode: "cors" });
       if (!res.ok) {
-        const text = await res.text();
-        console.error("GET /api/mapPins failed:", res.status, text);
+        const payload = await readJsonSafe(res);
+        console.error("GET /api/mapPins failed", res.status, payload);
         return;
       }
-      const data = await res.json();
-      if (data?.ok && Array.isArray(data.pins)) setPins(data.pins as Pin[]);
+      const data = await readJsonSafe(res);
+      if (data?.ok && Array.isArray(data.pins)) {
+        setPins(data.pins as Pin[]);
+      } else if (Array.isArray((data as any)?.pins)) {
+        setPins((data as any).pins);
+      }
     } catch (err) {
       console.error("GET /api/mapPins network error", err);
     }
@@ -206,17 +208,20 @@ export default function GoogleMapsView(): JSX.Element {
     });
   }, []);
 
-  const onMapClick = useCallback(async (e: google.maps.MapMouseEvent) => {
-    if (!e.latLng) return;
-    const lat = e.latLng.lat();
-    const lng = e.latLng.lng();
-    setPendingLatLng({ lat, lng });
-    setFormTitle("");
-    setFormType("retail");
-    const guessed = await reverseGeocode(lat, lng).catch(() => "");
-    setFormAddress(guessed || "");
-    setModalOpen(true);
-  }, [reverseGeocode]);
+  const onMapClick = useCallback(
+    async (e: google.maps.MapMouseEvent) => {
+      if (!e.latLng) return;
+      const lat = e.latLng.lat();
+      const lng = e.latLng.lng();
+      setPendingLatLng({ lat, lng });
+      setFormTitle("");
+      setFormType("retail");
+      const guessed = await reverseGeocode(lat, lng).catch(() => "");
+      setFormAddress(guessed || "");
+      setModalOpen(true);
+    },
+    [reverseGeocode],
+  );
 
   const onSavePin = useCallback(async () => {
     if (!pendingLatLng) return;
@@ -240,32 +245,23 @@ export default function GoogleMapsView(): JSX.Element {
         body: JSON.stringify(body),
       });
 
-      // Surface real server errors to debug CORS/validation/route mismatches quickly.
       if (!res.ok) {
-        let detail = "";
-        try {
-          const ct = res.headers.get("content-type") || "";
-          if (ct.includes("application/json")) {
-            const j = await res.json();
-            detail = JSON.stringify(j);
-          } else {
-            detail = await res.text();
-          }
-        } catch {
-          // ignore parse errors
-        }
-        alert(`Save failed: HTTP ${res.status}${detail ? ` — ${detail}` : ""}`);
+        const payload = await readJsonSafe(res);
+        const msg =
+          typeof payload === "string"
+            ? payload
+            : payload?.message || payload?.error || JSON.stringify(payload);
+        alert(`Save failed: HTTP ${res.status}${msg ? ` — ${msg}` : ""}`);
         return;
       }
 
-      const data = await res.json();
-      if (data?.ok) {
-        await fetchPins();
-        setModalOpen(false);
-        setPendingLatLng(null);
-      } else {
-        alert(`Save failed: ${JSON.stringify(data)}`);
-      }
+      // Success can be JSON, text, or empty (204). Treat any 2xx as success.
+      // Try to read and ignore if empty.
+      await readJsonSafe(res).catch(() => null);
+
+      await fetchPins();
+      setModalOpen(false);
+      setPendingLatLng(null);
     } catch (err: any) {
       alert(`Network error saving pin.${err?.message ? ` ${err.message}` : ""}`);
       console.error("POST /api/mapPins network error", err);
@@ -283,17 +279,14 @@ export default function GoogleMapsView(): JSX.Element {
   const showAll = useCallback(() => setSelectedCats(new Set(CATEGORIES)), []);
   const hideAll = useCallback(() => setSelectedCats(new Set()), []);
 
-  const filteredPins = useMemo(
-    () => pins.filter((p) => selectedCats.has(p.type)),
-    [pins, selectedCats],
-  );
+  const filteredPins = useMemo(() => pins.filter((p) => selectedCats.has(p.type)), [pins, selectedCats]);
 
   if (loadError) return <div style={{ padding: 24 }}>Failed to load Google Maps.</div>;
   if (!isLoaded) return <div style={{ padding: 24 }}>Loading map…</div>;
 
   return (
     <div style={pageWrap}>
-      {/* PANEL ABOVE MAP */}
+      {/* Panel above map */}
       <div className="teal-glow" style={panelStyle}>
         <h2 style={titleStyle}>Google Maps Engine</h2>
 
@@ -336,18 +329,14 @@ export default function GoogleMapsView(): JSX.Element {
 
         <div style={{ marginTop: 12 }}>
           <Autocomplete onLoad={(a) => (autoRef.current = a)} onPlaceChanged={onPlaceChanged}>
-            <input
-              placeholder="Search address, store, postcode…"
-              style={searchInput}
-              aria-label="Search places"
-            />
+            <input placeholder="Search address, store, postcode…" style={searchInput} aria-label="Search places" />
           </Autocomplete>
         </div>
       </div>
 
-      {/* MAP BELOW PANEL */}
+      {/* Map */}
       <GoogleMap
-        onLoad={onMapLoad}
+        onLoad={(m) => (mapRef.current = m)}
         onClick={onMapClick}
         mapContainerStyle={mapContainer}
         center={defaultCenter}
@@ -369,7 +358,7 @@ export default function GoogleMapsView(): JSX.Element {
         ))}
       </GoogleMap>
 
-      {/* ADD PIN MODAL */}
+      {/* Modal */}
       {modalOpen && (
         <div
           role="dialog"
@@ -519,8 +508,7 @@ export default function GoogleMapsView(): JSX.Element {
                   padding: "10px 14px",
                   borderRadius: 12,
                   border: "1px solid rgba(0,255,255,0.25)",
-                  background:
-                    "linear-gradient(135deg, rgba(0,255,255,0.18), rgba(0,255,200,0.18))",
+                  background: "linear-gradient(135deg, rgba(0,255,255,0.18), rgba(0,255,200,0.18))",
                   color: "#e6fffe",
                   fontWeight: 800,
                   cursor: "pointer",
