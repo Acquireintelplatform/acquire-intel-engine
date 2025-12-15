@@ -2,15 +2,14 @@
   "name": "acquire-intel-engine-frontend",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@react-google-maps/api": "^2.19.1",
     "@googlemaps/markerclusterer": "^2.6.2",
-    ""@react-google-maps/api": "^2.18.1",
     "axios": "^1.6.7",
     "clsx": "^2.1.0",
     "lucide-react": "^0.424.0",
