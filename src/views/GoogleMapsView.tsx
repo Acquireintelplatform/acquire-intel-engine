@@ -1,17 +1,13 @@
 // src/views/GoogleMapsView.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { GoogleMap, LoadScript, Marker } from "@react-google-maps/api";
+import {
+  GoogleMap,
+  useJsApiLoader,
+  Marker,
+  Autocomplete,
+} from "@react-google-maps/api";
 
-/** === Config (env + API base) ========================================== */
-const GOOGLE_KEY: string =
-  ((import.meta as any).env?.VITE_GOOGLE_MAPS_API_KEY as string) || "";
-
-const API_BASE: string =
-  ((import.meta as any).env?.VITE_API_BASE_URL as string) ||
-  "https://acquire-intel-api.onrender.com";
-
-/** === Categories ======================================================== */
-type CategoryKey =
+type Category =
   | "lateFilings"
   | "leaseExpiring"
   | "foodBeverage"
@@ -20,300 +16,425 @@ type CategoryKey =
   | "shoppingMalls"
   | "newProperties";
 
-const CATEGORY_LABEL: Record<CategoryKey, string> = {
-  lateFilings: "Late filings",
-  leaseExpiring: "Lease expiring",
-  foodBeverage: "Food & Beverage",
-  retail: "Retail",
-  driveThru: "Drive-thru",
-  shoppingMalls: "Shopping malls",
-  newProperties: "New properties",
-};
-
-const CATEGORY_COLOR: Record<CategoryKey, string> = {
-  lateFilings: "#44FFD4",
-  leaseExpiring: "#FFB020",
-  foodBeverage: "#8E44FF",
-  retail: "#00A870",
-  driveThru: "#3B82F6",
-  shoppingMalls: "#10B981",
-  newProperties: "#FF5A5F",
-};
-
-const ALL_CATEGORIES: CategoryKey[] = Object.keys(CATEGORY_LABEL) as CategoryKey[];
-
-/** === Types ============================================================= */
 type Pin = {
-  id: string;
+  id?: string | number;
   title: string;
-  type: CategoryKey;
-  address?: string;
+  type: Category;
   lat: number;
   lng: number;
-  createdAt?: string;
-  meta?: any;
+  address?: string;
 };
 
-/** === Map container/style ============================================== */
-const MAP_CONTAINER_STYLE: google.maps.MapOptions["styles"] | undefined = undefined;
-const MAP_DIMENSIONS = { width: "100%", height: "76vh" };
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string;
+const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY as string;
 
-const DEFAULT_CENTER = { lat: 51.507351, lng: -0.127758 }; // London
+// Keep exactly these seven categories across UX/API (chips & pin colors)
+const CATEGORIES: Category[] = [
+  "lateFilings",
+  "leaseExpiring",
+  "foodBeverage",
+  "retail",
+  "driveThru",
+  "shoppingMalls",
+  "newProperties",
+];
 
-/** Make a simple colored pin symbol */
-function makePin(color: string): google.maps.Symbol {
+// Minimal, readable search box container
+const searchBoxContainerStyle: React.CSSProperties = {
+  position: "absolute",
+  top: 16,
+  left: 16,
+  zIndex: 5,
+  display: "flex",
+  gap: 8,
+  alignItems: "center",
+};
+
+// Enforce readable text (no transparency)
+const searchInputStyle: React.CSSProperties = {
+  background: "#ffffff",
+  color: "#111111",
+  borderRadius: 12,
+  padding: "10px 12px",
+  minWidth: 320,
+  border: "1px solid rgba(0,0,0,0.12)",
+  outline: "none",
+  boxShadow: "0 6px 16px rgba(0,0,0,0.08)",
+};
+
+// Modal overlay + card; reuse global teal glow via `teal-glow` on the card.
+// Comment: We intentionally avoid guessing your full design system; `teal-glow` is reused per your note.
+const modalOverlayStyle: React.CSSProperties = {
+  position: "fixed",
+  inset: 0,
+  background: "rgba(0,0,0,0.45)",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  zIndex: 9999,
+};
+
+const modalCardStyle: React.CSSProperties = {
+  width: "100%",
+  maxWidth: 520,
+  background: "#0e1114",
+  borderRadius: 16,
+  padding: 20,
+  boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+  border: "1px solid rgba(0,255,255,0.15)",
+};
+
+const modalLabelStyle: React.CSSProperties = {
+  display: "block",
+  fontSize: 12,
+  letterSpacing: 0.4,
+  marginBottom: 6,
+  color: "rgba(255,255,255,0.7)",
+  textTransform: "uppercase",
+};
+
+const modalInputStyle: React.CSSProperties = {
+  width: "100%",
+  background: "#0f1418",
+  color: "#e6f6f5",
+  border: "1px solid rgba(0,255,255,0.25)",
+  borderRadius: 12,
+  padding: "10px 12px",
+  outline: "none",
+};
+
+const modalRowStyle: React.CSSProperties = { display: "grid", gap: 12 };
+const modalFooterStyle: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "flex-end",
+  gap: 12,
+  marginTop: 12,
+};
+
+const tealButtonClass =
+  "teal-glow"; /* keep consistent; assume global class exists per brief */
+const chipBase =
+  "teal-glow"; /* reused on chips for premium soft glow look & consistent spacing */
+
+const mapContainerStyle: React.CSSProperties = { width: "100%", height: "calc(100vh - 80px)" };
+const defaultCenter = { lat: 51.5074, lng: -0.1278 }; // London
+const defaultZoom = 10;
+
+// Category → marker color (kept stable)
+const CATEGORY_COLOR: Record<Category, string> = {
+  lateFilings: "#0dd3d3",
+  leaseExpiring: "#00c2a8",
+  foodBeverage: "#35b0ff",
+  retail: "#7c5cff",
+  driveThru: "#ff8a4d",
+  shoppingMalls: "#ffb300",
+  newProperties: "#5ad66f",
+};
+
+// SVG path for a clean marker. We use a symbol so we can color by category.
+// Why: keeps consistent brand colours without external assets.
+const PIN_PATH =
+  "M12 2C7.6 2 4 5.6 4 10c0 5.6 8 12 8 12s8-6.4 8-12c0-4.4-3.6-8-8-8zm0 10.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z";
+
+function categoryIcon(category: Category): google.maps.Symbol {
   return {
-    path: google.maps.SymbolPath.CIRCLE,
-    scale: 8,
-    fillColor: color,
-    fillOpacity: 1,
-    strokeColor: "#0C1E1B",
-    strokeWeight: 2,
+    path: PIN_PATH as any,
+    fillColor: CATEGORY_COLOR[category],
+    fillOpacity: 0.95,
+    strokeColor: "white",
+    strokeWeight: 1,
+    scale: 1.2,
+    anchor: new google.maps.Point(12, 22),
   };
 }
 
-/** ================================================================
- *  Main View
- *  ================================================================ */
-const GoogleMapsView: React.FC = () => {
+export default function GoogleMapsView(): JSX.Element {
+  const { isLoaded, loadError } = useJsApiLoader({
+    id: "google-maps",
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+    libraries: ["places"],
+  });
+
   const mapRef = useRef<google.maps.Map | null>(null);
+  const autoRef = useRef<google.maps.places.Autocomplete | null>(null);
 
   const [pins, setPins] = useState<Pin[]>([]);
-  const [visibleCats, setVisibleCats] = useState<Record<CategoryKey, boolean>>(
-    () =>
-      ALL_CATEGORIES.reduce((acc, k) => {
-        acc[k] = true;
-        return acc;
-      }, {} as Record<CategoryKey, boolean>)
+  const [selectedCats, setSelectedCats] = useState<Set<Category>>(
+    () => new Set(CATEGORIES),
   );
 
-  const [search, setSearch] = useState("");
-  const [isPlacing, setIsPlacing] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [pendingLatLng, setPendingLatLng] = useState<{ lat: number; lng: number } | null>(null);
+  const [formTitle, setFormTitle] = useState("");
+  const [formType, setFormType] = useState<Category>("retail");
+  const [formAddress, setFormAddress] = useState("");
 
-  /** Load pins from API */
-  const loadPins = useCallback(async () => {
-    try {
-      const res = await fetch(`${API_BASE}/api/mapPins`);
-      const data = await res.json();
-      if (res.ok && data?.ok) {
-        setPins(data.pins || []);
-      } else {
-        console.error("Load pins failed:", data);
-      }
-    } catch (e) {
-      console.error("Load pins error:", e);
+  // Load pins once, then whenever we save.
+  const fetchPins = useCallback(async () => {
+    const res = await fetch(`${API_BASE_URL}/api/mapPins`, { credentials: "omit" });
+    const data = await res.json();
+    if (data?.ok && Array.isArray(data.pins)) {
+      setPins(data.pins as Pin[]);
     }
   }, []);
 
   useEffect(() => {
-    loadPins();
-    // Expose a quick refresher in case we need it
-    (window as any).__reloadPins = loadPins;
-  }, [loadPins]);
+    fetchPins().catch(() => void 0);
+  }, [fetchPins]);
 
-  /** Show all / Hide all */
-  const showAll = useCallback(() => {
-    setVisibleCats(
-      ALL_CATEGORIES.reduce((acc, k) => {
-        acc[k] = true;
-        return acc;
-      }, {} as Record<CategoryKey, boolean>)
-    );
-  }, []);
-
-  const hideAll = useCallback(() => {
-    setVisibleCats(
-      ALL_CATEGORIES.reduce((acc, k) => {
-        acc[k] = false;
-        return acc;
-      }, {} as Record<CategoryKey, boolean>)
-    );
-  }, []);
-
-  /** Toggle a single category */
-  const toggleCat = useCallback((k: CategoryKey) => {
-    setVisibleCats((prev) => ({ ...prev, [k]: !prev[k] }));
-  }, []);
-
-  /** Filtered pins to render */
-  const filteredPins = useMemo(
-    () => pins.filter((p) => visibleCats[p.type]),
-    [pins, visibleCats]
-  );
-
-  /** Search → geocode → pan */
-  const onSearch = useCallback(async () => {
-    const g = (window as any).google;
-    if (!mapRef.current || !g?.maps?.Geocoder) return;
-    if (!search.trim()) return;
-
-    try {
-      const geocoder = new g.maps.Geocoder();
-      const res = await geocoder.geocode({ address: search.trim() });
-      const location = res?.results?.[0]?.geometry?.location;
-      if (location) {
-        mapRef.current.panTo(location);
-        mapRef.current.setZoom(15);
-      }
-    } catch (e) {
-      console.error("Geocode error:", e);
-    }
-  }, [search]);
-
-  /** Fallback, full-screen safe: prompt-based add */
-  const promptAndAddPin = useCallback(
-    async (lat: number, lng: number) => {
-      try {
-        const title = window.prompt("Pin title", "Test pin");
-        if (!title) return;
-
-        const type = (window
-          .prompt(
-            'Type (one of): lateFilings | leaseExpiring | foodBeverage | retail | driveThru | shoppingMalls | newProperties',
-            "retail"
-          )
-          ?.trim() || "") as CategoryKey;
-
-        if (!ALL_CATEGORIES.includes(type)) {
-          alert("Invalid type.");
-          return;
-        }
-
-        const address =
-          window.prompt("Address (optional)", `${lat.toFixed(6)}, ${lng.toFixed(6)}`) || "";
-
-        const res = await fetch(`${API_BASE}/api/mapPins`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title, type, address, lat, lng }),
-        });
-        const data = await res.json();
-        if (!res.ok || !data?.ok) {
-          alert(`Save failed: ${data?.error || res.statusText}`);
-          return;
-        }
-        await loadPins();
-      } catch (e: any) {
-        alert(`Save failed: ${e?.message || e}`);
-      }
-    },
-    [loadPins]
-  );
-
-  /** Handle map click */
-  const onMapClick = useCallback(
-    (e: google.maps.MapMouseEvent) => {
-      if (!isPlacing) return;
-      const lat = e.latLng?.lat();
-      const lng = e.latLng?.lng();
-      if (lat != null && lng != null) {
-        // fallback prompt-add
-        promptAndAddPin(lat, lng);
-        setIsPlacing(false);
-      }
-    },
-    [isPlacing, promptAndAddPin]
-  );
-
-  const onLoadMap = (map: google.maps.Map) => {
+  const onMapLoad = useCallback((map: google.maps.Map) => {
     mapRef.current = map;
-  };
+  }, []);
 
-  /** Render buttons (compact) */
-  const Button: React.FC<
-    React.PropsWithChildren<{ onClick?: () => void; active?: boolean }>
-  > = ({ onClick, active, children }) => (
-    <button
-      onClick={onClick}
-      className="rounded-xl px-4 py-2 mx-1 my-1 text-sm font-semibold shadow-[0_1px_0_rgba(0,0,0,.25),0_0_10px_rgba(47,255,209,.20),0_0_24px_rgba(47,255,209,.14)]"
-      style={{
-        background: active ? "rgba(47,255,209,0.18)" : "rgba(47,255,209,0.10)",
-        border: "1px solid rgba(47,255,209,0.35)",
-        color: "#B9FFF2",
-      }}
-    >
-      {children}
-    </button>
+  const onPlaceChanged = useCallback(() => {
+    const auto = autoRef.current;
+    if (!auto) return;
+    const place = auto.getPlace();
+    if (!place || !place.geometry || !place.geometry.location) return;
+    const loc = place.geometry.location;
+    const lat = loc.lat();
+    const lng = loc.lng();
+    mapRef.current?.panTo({ lat, lng });
+    mapRef.current?.setZoom(14);
+  }, []);
+
+  // Reverse geocode address (best-effort, optional).
+  const reverseGeocode = useCallback(async (lat: number, lng: number): Promise<string> => {
+    if (!(window as any).google?.maps?.Geocoder) return "";
+    return new Promise((resolve) => {
+      const geocoder = new google.maps.Geocoder();
+      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+        if (status === "OK" && results && results[0]) {
+          resolve(results[0].formatted_address ?? "");
+        } else {
+          resolve("");
+        }
+      });
+    });
+  }, []);
+
+  const onMapClick = useCallback(
+    async (e: google.maps.MapMouseEvent) => {
+      if (!e.latLng) return;
+      const lat = e.latLng.lat();
+      const lng = e.latLng.lng();
+      setPendingLatLng({ lat, lng });
+      setFormTitle("");
+      setFormType("retail");
+      // Prefill address if possible, but don't block UI.
+      const guessed = await reverseGeocode(lat, lng).catch(() => "");
+      setFormAddress(guessed || "");
+      setModalOpen(true);
+    },
+    [reverseGeocode],
   );
+
+  // Save → POST /api/mapPins, then refresh.
+  const onSavePin = useCallback(async () => {
+    if (!pendingLatLng) return;
+    if (!formTitle.trim()) {
+      alert("Title is required.");
+      return;
+    }
+    const body = {
+      title: formTitle.trim(),
+      type: formType,
+      address: formAddress?.trim() || "",
+      lat: pendingLatLng.lat,
+      lng: pendingLatLng.lng,
+    };
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/mapPins`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (data?.ok) {
+        await fetchPins();
+        setModalOpen(false);
+        setPendingLatLng(null);
+      } else {
+        alert("Failed to save pin.");
+      }
+    } catch {
+      alert("Network error saving pin.");
+    }
+  }, [pendingLatLng, formTitle, formType, formAddress, fetchPins]);
+
+  const toggleCategory = useCallback((cat: Category) => {
+    setSelectedCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
+  }, []);
+
+  const filteredPins = useMemo(
+    () => pins.filter((p) => selectedCats.has(p.type)),
+    [pins, selectedCats],
+  );
+
+  if (loadError) return <div style={{ padding: 24 }}>Failed to load Google Maps.</div>;
+  if (!isLoaded) return <div style={{ padding: 24 }}>Loading map…</div>;
 
   return (
-    <div className="px-4 pb-8">
-      <h1 className="text-3xl font-semibold mb-4">Google Maps Engine</h1>
+    <div style={{ position: "relative" }}>
+      {/* Search & Category Chips */}
+      <div style={searchBoxContainerStyle}>
+        <Autocomplete
+          onLoad={(a) => (autoRef.current = a)}
+          onPlaceChanged={onPlaceChanged}
+        >
+          <input
+            placeholder="Search places (UK)…"
+            style={searchInputStyle}
+            aria-label="Search places"
+          />
+        </Autocomplete>
 
-      <div className="flex flex-wrap items-center mb-3">
-        <Button onClick={() => setIsPlacing((s) => !s)} active={isPlacing}>
-          Click map to place…
-        </Button>
-        <Button onClick={loadPins}>Refresh</Button>
-        <Button onClick={showAll}>Show all</Button>
-        <Button onClick={hideAll}>Hide all</Button>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {CATEGORIES.map((cat) => {
+            const active = selectedCats.has(cat);
+            return (
+              <button
+                key={cat}
+                type="button"
+                className={chipBase}
+                onClick={() => toggleCategory(cat)}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: 999,
+                  border: "1px solid rgba(0,255,255,0.25)",
+                  background: active ? "rgba(0,255,255,0.12)" : "rgba(255,255,255,0.06)",
+                  color: active ? "#cfffff" : "#e5f7f7",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  letterSpacing: 0.2,
+                  cursor: "pointer",
+                }}
+              >
+                {cat}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center mb-3">
-        {ALL_CATEGORIES.map((k) => (
-          <Button key={k} onClick={() => toggleCat(k)} active={visibleCats[k]}>
-            <span
-              className="inline-block w-2.5 h-2.5 rounded-full mr-2 align-[2px]"
-              style={{ background: CATEGORY_COLOR[k] }}
-            />
-            {CATEGORY_LABEL[k]}
-          </Button>
-        ))}
-      </div>
-
-      <div className="mb-3">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && onSearch()}
-          placeholder="Search address, store, postcode…"
-          className="w-full max-w-xl rounded-xl px-4 py-3"
-          style={{
-            background: "rgba(9, 30, 27, 0.9)",
-            color: "#DFFCF6",
-            border: "1px solid rgba(47,255,209,.28)",
-            boxShadow:
-              "0 1px 0 rgba(0,0,0,.25), 0 0 10px rgba(47,255,209,.20), 0 0 24px rgba(47,255,209,.14)",
-          }}
-        />
-      </div>
-
-      <div
-        className="rounded-2xl overflow-hidden"
-        style={{
-          border: "1px solid rgba(47,255,209,.28)",
-          boxShadow:
-            "0 1px 0 rgba(0,0,0,.25), 0 0 10px rgba(47,255,209,.20), 0 0 24px rgba(47,255,209,.14)",
+      {/* Map */}
+      <GoogleMap
+        onLoad={onMapLoad}
+        onClick={onMapClick}
+        mapContainerStyle={mapContainerStyle}
+        center={defaultCenter}
+        zoom={defaultZoom}
+        options={{
+          streetViewControl: false,
+          mapTypeControl: false,
+          fullscreenControl: false,
+          clickableIcons: false,
+          styles: undefined,
         }}
       >
-        <LoadScript googleMapsApiKey={GOOGLE_KEY} libraries={["places"]}>
-          <GoogleMap
-            mapContainerStyle={MAP_DIMENSIONS}
-            center={DEFAULT_CENTER}
-            zoom={12}
-            options={{
-              styles: MAP_CONTAINER_STYLE,
-              streetViewControl: true,
-              fullscreenControl: true,
-              mapTypeControl: false,
-              clickableIcons: true,
-            }}
-            onClick={onMapClick}
-            onLoad={onLoadMap}
-          >
-            {filteredPins.map((p) => (
-              <Marker
-                key={p.id}
-                position={{ lat: p.lat, lng: p.lng }}
-                title={`${p.title} — ${CATEGORY_LABEL[p.type]}`}
-                icon={makePin(CATEGORY_COLOR[p.type])}
+        {filteredPins.map((pin, idx) => (
+          <Marker
+            key={pin.id ?? `${pin.lat},${pin.lng},${idx}`}
+            position={{ lat: pin.lat, lng: pin.lng }}
+            title={`${pin.title}${pin.address ? " — " + pin.address : ""}`}
+            icon={categoryIcon(pin.type)}
+          />
+        ))}
+      </GoogleMap>
+
+      {/* Modal for adding a pin */}
+      {modalOpen && (
+        <div style={modalOverlayStyle} role="dialog" aria-modal="true" aria-label="Add pin">
+          <div className={`teal-glow`} style={modalCardStyle}>
+            <h3 style={{ margin: "6px 0 14px", color: "#cfffff", fontSize: 18, fontWeight: 700 }}>
+              Add Map Pin
+            </h3>
+
+            <div style={modalRowStyle}>
+              <label style={modalLabelStyle}>Title *</label>
+              <input
+                style={modalInputStyle}
+                placeholder="e.g., Prime retail unit"
+                value={formTitle}
+                onChange={(e) => setFormTitle(e.target.value)}
               />
-            ))}
-          </GoogleMap>
-        </LoadScript>
-      </div>
+            </div>
+
+            <div style={{ height: 12 }} />
+
+            <div style={modalRowStyle}>
+              <label style={modalLabelStyle}>Type</label>
+              <select
+                style={modalInputStyle}
+                value={formType}
+                onChange={(e) => setFormType(e.target.value as Category)}
+              >
+                {CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div style={{ height: 12 }} />
+
+            <div style={modalRowStyle}>
+              <label style={modalLabelStyle}>Address</label>
+              <input
+                style={modalInputStyle}
+                placeholder="Optional address"
+                value={formAddress}
+                onChange={(e) => setFormAddress(e.target.value)}
+              />
+            </div>
+
+            <div style={modalFooterStyle}>
+              <button
+                type="button"
+                className={tealButtonClass}
+                onClick={() => {
+                  setModalOpen(false);
+                  setPendingLatLng(null);
+                }}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(0,255,255,0.25)",
+                  background: "transparent",
+                  color: "#cfffff",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={tealButtonClass}
+                onClick={onSavePin}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 12,
+                  border: "1px solid rgba(0,255,255,0.25)",
+                  background:
+                    "linear-gradient(135deg, rgba(0,255,255,0.18), rgba(0,255,200,0.18))",
+                  color: "#e6fffe",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-};
-
-export default GoogleMapsView;
+}
