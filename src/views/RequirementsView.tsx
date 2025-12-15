@@ -1,321 +1,210 @@
 // src/views/RequirementsView.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 
-/* API base */
-const API_BASE: string =
+type Requirement = {
+  id: string;
+  ts: number;
+  operatorId?: string;
+  name: string;
+  preferredLocations?: string;
+  notes?: string;
+};
+
+const API_BASE =
   (import.meta as any).env?.VITE_API_URL ||
   (import.meta as any).env?.VITE_API_BASE ||
   (import.meta as any).env?.VITE_API_BASE_URL ||
   "https://acquire-intel-api.onrender.com";
 
-/* Types */
-type Row = {
-  id?: number;
-  operatorId?: number | null;
-  title?: string;
-  notes?: string;
-  preferredLocations?: string[] | string | null;
-  createdAt?: string;
+const panel: React.CSSProperties = {
+  background: "linear-gradient(180deg, rgba(7,20,24,0.98), rgba(7,20,24,0.92))",
+  border: "1px solid rgba(0,255,255,0.18)",
+  borderRadius: 16,
+  padding: 16,
+  boxShadow: "0 18px 60px rgba(0,0,0,0.35)",
+};
+const h2s: React.CSSProperties = { fontSize: 28, fontWeight: 800, color: "#e6ffff", margin: 0 };
+const label: React.CSSProperties = {
+  display: "block",
+  fontSize: 12,
+  letterSpacing: 0.4,
+  marginBottom: 6,
+  color: "rgba(255,255,255,0.7)",
+  textTransform: "uppercase",
+};
+const input: React.CSSProperties = {
+  width: "100%",
+  background: "#0f1418",
+  color: "#e6f6f5",
+  border: "1px solid rgba(0,255,255,0.25)",
+  borderRadius: 12,
+  padding: "10px 12px",
+  outline: "none",
+};
+const row: React.CSSProperties = { display: "grid", gap: 12 };
+const actions: React.CSSProperties = { display: "flex", gap: 12, justifyContent: "flex-end" };
+const btn: React.CSSProperties = {
+  padding: "10px 14px",
+  borderRadius: 12,
+  border: "1px solid rgba(0,255,255,0.25)",
+  background: "rgba(0,255,255,0.10)",
+  color: "#e6ffff",
+  fontWeight: 700,
+  cursor: "pointer",
 };
 
-/* Helpers */
-function toArray(v: any): string[] {
-  if (Array.isArray(v)) return v.filter(Boolean);
-  if (!v) return [];
-  if (typeof v === "string") return v.split(/[,;|]/).map(s => s.trim()).filter(Boolean);
-  return [String(v)];
-}
-const esc = (s: string) => `"${s.replace(/"/g, '""')}"`;
-
-const CSV_HEADERS = ["id", "operatorId", "name", "notes", "preferredLocations", "createdAt"];
-
-function rowsToCsv(rows: Row[]): string {
-  const lines = rows.map(r => {
-    const name = r.title ?? "";
-    const locs = toArray(r.preferredLocations).join("; ");
-    return [
-      r.id ?? "",
-      r.operatorId ?? "",
-      name,
-      r.notes ?? "",
-      locs,
-      r.createdAt ?? ""
-    ].map(v => esc(String(v))).join(",");
-  });
-  return [CSV_HEADERS.join(","), ...lines].join("\r\n");
-}
-
-function templateCsv(): string {
-  // Header-only template (no rows)
-  return CSV_HEADERS.join(",") + "\r\n";
-}
-
-function downloadCsvFile(filename: string, csv: string) {
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-async function get<T>(p: string): Promise<T> {
-  const r = await fetch(`${API_BASE}${p}`);
-  if (!r.ok) throw new Error(`${r.status} ${p}`);
-  return r.json();
-}
-async function send<T>(p: string, m: "POST" | "PUT", b: any): Promise<T> {
-  const r = await fetch(`${API_BASE}${p}`, {
-    method: m, headers: { "Content-Type": "application/json" }, body: JSON.stringify(b),
-  });
-  if (!r.ok) throw new Error(`${r.status} ${p}`);
-  return r.json();
-}
-async function tryPutBoth(id: number, body: any): Promise<Row> {
-  const a = await fetch(`${API_BASE}/api/operatorRequirements/manual/${id}`, {
-    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  });
-  if (a.ok) return a.json();
-  const b = await fetch(`${API_BASE}/api/operatorRequirements/${id}`, {
-    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
-  });
-  if (b.ok) return b.json();
-  throw new Error("PUT failed");
-}
-
 export default function RequirementsView(): JSX.Element {
-  const [rows, setRows] = useState<Row[]>([]);
-  const [msg, setMsg] = useState(""); const [err, setErr] = useState(""); const [csvOk, setCsvOk] = useState(false);
+  const [operatorId, setOperatorId] = useState("");
+  const [name, setName] = useState("");
+  const [preferredLocations, setPreferredLocations] = useState("");
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [items, setItems] = useState<Requirement[]>([]);
+  const [status, setStatus] = useState("—");
 
-  const empty: Row = { operatorId: 1, title: "", notes: "", preferredLocations: [] };
-  const [form, setForm] = useState<Row>(empty);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editingLabel, setEditingLabel] = useState<string>("");
-
-  function inform(s: string) { setMsg(s); setTimeout(() => setMsg(""), 1600); }
-  function warn(s: string) { setErr(s); setTimeout(() => setErr(""), 2600); }
-
-  async function refresh() {
+  const fetchList = useCallback(async () => {
     try {
-      const data = await get<Row[]>("/api/operatorRequirements/manual");
-      setRows((Array.isArray(data) ? data : []).map(r => ({
-        ...r, preferredLocations: toArray(r.preferredLocations),
-      })));
-    } catch (e: any) { warn(e.message || "Load failed"); }
-  }
-  useEffect(() => { refresh(); }, []);
-
-  const total = useMemo(() => rows.length, [rows]);
-
-  function onEdit(r: Row, idx: number) {
-    const id = r.id ?? null;
-    setEditingId(id);
-    setEditingLabel(r.title || `Row ${idx + 1}`);
-    setForm({
-      operatorId: r.operatorId ?? 1,
-      title: r.title ?? "",
-      notes: r.notes ?? "",
-      preferredLocations: toArray(r.preferredLocations),
-    });
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  async function onSave(e: React.FormEvent) {
-    e.preventDefault();
-    const payload = {
-      operatorId: form.operatorId ?? 1,
-      title: (form.title || "").trim(),
-      notes: (form.notes || "").trim(),
-      preferredLocations: toArray(form.preferredLocations),
-    };
-    if (!payload.title) return warn("Operator Name is required");
-    try {
-      if (editingId != null) {
-        const updated = await tryPutBoth(editingId, payload);
-        setRows(prev =>
-          prev.map(x => x.id === editingId ? { ...updated, preferredLocations: toArray(updated.preferredLocations) } : x)
-        );
-        setEditingId(null); setEditingLabel(""); setForm(empty); inform("Updated");
-      } else {
-        const saved = await send<Row>("/api/operatorRequirements/manual", "POST", payload);
-        setRows(prev => [...prev, { ...saved, preferredLocations: toArray(saved.preferredLocations) }]);
-        setForm(empty); inform("Saved");
+      setStatus("loading…");
+      const res = await fetch(`${API_BASE}/api/operatorRequirements/manual`);
+      if (!res.ok) {
+        setStatus(`HTTP ${res.status}`);
+        return;
       }
-    } catch (e: any) { warn(e.message || "Save failed"); }
-  }
+      const j = await res.json();
+      // Backend returns { ok, count, items }
+      if (j?.ok && Array.isArray(j.items)) {
+        setItems(j.items as Requirement[]);
+        setStatus("ok");
+      } else {
+        setItems([]);
+        setStatus("empty");
+      }
+    } catch {
+      setStatus("network error");
+    }
+  }, []);
 
-  async function onDelete(id: number) {
-    if (!confirm("Delete this item?")) return;
-    async function tryDel(url: string) { const r = await fetch(url, { method: "DELETE" }); return r.ok || r.status === 404; }
+  useEffect(() => {
+    fetchList().catch(() => void 0);
+  }, [fetchList]);
+
+  const onSave = useCallback(async () => {
+    if (!name.trim()) {
+      alert("Name is required.");
+      return;
+    }
+    setSaving(true);
     try {
-      let ok = await tryDel(`${API_BASE}/api/operatorRequirements/manual/${id}`);
-      if (!ok) ok = await tryDel(`${API_BASE}/api/operatorRequirements/${id}`);
-      if (!ok) throw new Error("delete failed");
-      setRows(prev => prev.filter(x => x.id !== id)); inform("Deleted");
-    } catch { warn("Delete failed"); }
-  }
-
-  const Title = ({ children }: { children: React.ReactNode }) =>
-    <h2 className="brand-title">{children}</h2>;
-
-  const Card: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-    <section
-      style={{
-        borderRadius: 16, padding: 20,
-        border: "1px solid rgba(255,255,255,0.08)",
-        background: "rgba(255,255,255,0.02)",
-        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)"
-      }}
-    >{children}</section>
-  );
-
-  const ButtonRow = ({ children }: { children: React.ReactNode }) =>
-    <div style={{ display: "grid", gridAutoFlow: "column", columnGap: 12, alignItems: "center" }}>{children}</div>;
-
-  const Pill = (props: React.ButtonHTMLAttributes<HTMLButtonElement> & { primary?: boolean }) => (
-    <button
-      {...props}
-      className="brand-btn"
-      data-variant={props.primary ? "primary" : undefined}
-    />
-  );
-
-  function onDownloadCsv() {
-    const csv = rowsToCsv(rows);
-    const ts = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-    downloadCsvFile(`operator-requirements-${ts}.csv`, csv);
-    inform("CSV downloaded");
-  }
-
-  function onDownloadTemplate() {
-    const csv = templateCsv();
-    downloadCsvFile("operators_template.csv", csv);
-    inform("Template downloaded");
-  }
+      // Backend expects: { name, operatorId, preferredLocations (string), notes }
+      const res = await fetch(`${API_BASE}/api/operatorRequirements/manual`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          operatorId: operatorId.trim(),
+          preferredLocations: preferredLocations.trim(),
+          notes: notes.trim(),
+        }),
+      });
+      if (!res.ok) {
+        let msg = "";
+        try {
+          const j = await res.json();
+          msg = j?.error || j?.message || "";
+        } catch {}
+        alert(`Save failed (HTTP ${res.status})${msg ? ` — ${msg}` : ""}`);
+        return;
+      }
+      const j = await res.json(); // { ok:true, item }
+      if (j?.ok) {
+        setOperatorId("");
+        setName("");
+        setPreferredLocations("");
+        setNotes("");
+        await fetchList();
+        alert("Requirement saved.");
+      }
+    } catch (e: any) {
+      alert(`Network error saving requirement. ${e?.message || ""}`);
+    } finally {
+      setSaving(false);
+    }
+  }, [operatorId, name, preferredLocations, notes, fetchList]);
 
   return (
-    <div className="space-y-6">
-      {/* Upload */}
-      <Card>
-        <div className="flex items-center justify-between">
-          <Title>Upload Requirements (PDF or CSV)</Title>
-          {csvOk && <span className="text-green-500 text-xs">✅ CSV uploaded</span>}
-        </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <input
-            type="file"
-            className="text-sm"
-            onChange={e => {
-              const f = e.target.files?.[0]; if (!f) return;
-              (async () => {
-                try {
-                  const fd = new FormData(); fd.append("file", f);
-                  const r = await fetch(`${API_BASE}/api/operatorCsvUpload`, { method: "POST", body: fd });
-                  setCsvOk(r.ok); inform("CSV uploaded"); await refresh();
-                } catch { setCsvOk(false); }
-              })();
-            }}
-          />
-          <Pill primary>Upload &amp; Process</Pill>
-          <Pill onClick={onDownloadCsv} title="Download all requirements as CSV">Download CSV</Pill>
-          <Pill onClick={onDownloadTemplate} title="Download empty CSV template with correct headers">
-            Download CSV Template
-          </Pill>
-        </div>
-      </Card>
+    <div style={{ padding: 16, display: "grid", gap: 16 }}>
+      <div className="teal-glow" style={panel}>
+        <h2 style={h2s}>Requirements</h2>
 
-      {/* Form */}
-      <Card>
-        <div className="flex items-center justify-between">
-          <Title>{editingId != null ? "Edit Requirement" : "Add Requirement Manually"}</Title>
-          {editingId != null && (
-            <span className="text-xs px-2 py-1 rounded-full border border-white/15 opacity-80">
-              Editing: {editingLabel} (ID {editingId})
-            </span>
+        <div style={{ display: "grid", gap: 14, marginTop: 10 }}>
+          <div style={row}>
+            <label style={label}>Operator ID</label>
+            <input style={input} value={operatorId} onChange={(e) => setOperatorId(e.target.value)} placeholder="Optional operator ref" />
+          </div>
+
+          <div style={row}>
+            <label style={label}>Name *</label>
+            <input style={input} value={name} onChange={(e) => setName(e.target.value)} placeholder="Operator / Requirement name" />
+          </div>
+
+          <div style={row}>
+            <label style={label}>Preferred Locations</label>
+            <input
+              style={input}
+              value={preferredLocations}
+              onChange={(e) => setPreferredLocations(e.target.value)}
+              placeholder="e.g., London, Manchester, Birmingham"
+            />
+          </div>
+
+          <div style={row}>
+            <label style={label}>Notes</label>
+            <textarea style={{ ...input, minHeight: 96 }} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Any extra notes" />
+          </div>
+
+          <div style={actions}>
+            <button type="button" className="teal-glow" style={btn} disabled={saving} onClick={onSave}>
+              {saving ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 16, borderTop: "1px solid rgba(0,255,255,0.12)", paddingTop: 12 }}>
+          <div style={{ color: "#cfffff", fontSize: 13, marginBottom: 8 }}>
+            Status: {status} • Total: {items.length}
+          </div>
+
+          {items.length === 0 ? (
+            <div style={{ color: "#9cd7d7" }}>No requirements yet.</div>
+          ) : (
+            <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 8 }}>
+              {items
+                .slice()
+                .reverse()
+                .map((it) => (
+                  <li
+                    key={it.id}
+                    className="teal-glow"
+                    style={{
+                      border: "1px solid rgba(0,255,255,0.18)",
+                      borderRadius: 12,
+                      padding: 10,
+                      background: "rgba(0,255,255,0.04)",
+                    }}
+                  >
+                    <div style={{ fontWeight: 800, color: "#e6ffff" }}>{it.name}</div>
+                    <div style={{ fontSize: 12, color: "#a8f1ef" }}>
+                      ID {it.id} • {new Date(it.ts).toLocaleString()}
+                      {it.operatorId ? ` • Operator: ${it.operatorId}` : ""}
+                    </div>
+                    {it.preferredLocations && <div style={{ marginTop: 4, color: "#cfffff" }}>Locations: {it.preferredLocations}</div>}
+                    {it.notes && <div style={{ marginTop: 4, color: "#cfffff" }}>Notes: {it.notes}</div>}
+                  </li>
+                ))}
+            </ul>
           )}
         </div>
-
-        {msg && <div className="text-green-500 text-sm">{msg}</div>}
-        {err && <div className="text-red-500 text-sm">{err}</div>}
-
-        <form className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end" onSubmit={onSave}>
-          <div>
-            <label className="block text-xs mb-1 opacity-80">Operator</label>
-            <input type="number" className="w-full border rounded-md px-2 py-1.5 text-sm bg-transparent"
-                   value={form.operatorId ?? ""} onChange={e => setForm(f => ({ ...f, operatorId: e.target.value ? Number(e.target.value) : null }))} />
-          </div>
-          <div>
-            <label className="block text-xs mb-1 opacity-80">Operator Name *</label>
-            <input className="w-full border rounded-md px-2 py-1.5 text-sm bg-transparent" placeholder="e.g., Nando's"
-                   value={form.title ?? ""} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
-          </div>
-          <div className="md:col-span-2">
-            <label className="block text-xs mb-1 opacity-80">Preferred Locations (comma separated)</label>
-            <input className="w-full border rounded-md px-2 py-1.5 text-sm bg-transparent"
-                   value={toArray(form.preferredLocations).join(", ")} onChange={e => setForm(f => ({ ...f, preferredLocations: toArray(e.target.value) }))} />
-          </div>
-          <div className="md:col-span-4">
-            <label className="block text-xs mb-1 opacity-80">Notes</label>
-            <input className="w-full border rounded-md px-2 py-1.5 text-sm bg-transparent"
-                   value={form.notes ?? ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
-          </div>
-          <div className="md:col-span-4">
-            <ButtonRow>
-              <Pill primary type="submit">{editingId != null ? "Update Requirement" : "Save Requirement"}</Pill>
-              {editingId != null && <Pill onClick={() => { setEditingId(null); setEditingLabel(""); setForm(empty); }}>Cancel Edit</Pill>}
-            </ButtonRow>
-          </div>
-        </form>
-      </Card>
-
-      {/* Table */}
-      <Card>
-        <div className="flex items-center justify-between">
-          <Title>Recent Manual Entries</Title>
-          <Pill onClick={refresh}>Refresh</Pill>
-        </div>
-        <div className="text-xs opacity-70">Total: {total}</div>
-
-        <div className="overflow-x-auto border border-white/10 rounded-xl">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs opacity-80">
-              <tr>
-                <th className="p-3 border-b border-white/10 w-44">Created</th>
-                <th className="p-3 border-b border-white/10 w-64">Name</th>
-                <th className="p-3 border-b border-white/10">Preferred Locations</th>
-                <th className="p-3 border-b border-white/10 w-64">Notes</th>
-                <th className="p-3 border-b border-white/10 w-44">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, i) => (
-                <tr key={r.id ?? i} className="align-top">
-                  <td className="p-3 border-b border-white/10 whitespace-nowrap">
-                    {r.createdAt ? new Date(r.createdAt).toLocaleString() : "—"}
-                  </td>
-                  <td className="p-3 border-b border-white/10 whitespace-nowrap">{r.title ?? "—"}</td>
-                  <td className="p-3 border-b border-white/10">
-                    <div className="truncate max-w-xs md:max-w-md" title={toArray(r.preferredLocations).join("; ")}>
-                      {toArray(r.preferredLocations).join("; ") || "—"}
-                    </div>
-                  </td>
-                  <td className="p-3 border-b border-white/10">
-                    <div className="whitespace-pre-wrap break-words max-w-xs md:max-w-sm">{r.notes ?? "—"}</div>
-                  </td>
-                  <td className="p-3 border-b border-white/10 whitespace-nowrap">
-                    <div style={{ display: "grid", gridAutoFlow: "column", columnGap: 12, alignItems: "center" }}>
-                      <Pill onClick={() => onEdit(r, i)}>Edit</Pill>
-                      {r.id != null && <Pill primary onClick={() => onDelete(r.id!)}>Delete</Pill>}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 && (<tr><td className="p-6 text-center text-sm" colSpan={5}>No requirements yet.</td></tr>)}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+      </div>
     </div>
   );
 }
