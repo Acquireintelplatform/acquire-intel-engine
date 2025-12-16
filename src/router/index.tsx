@@ -1,52 +1,66 @@
 // src/router/index.tsx
-import { lazy, Suspense } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
-import Layout from "@/layout/Layout";
-import PageWrapper from "@/components/PageWrapper";
+import React, { Suspense, lazy } from "react";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-// lazy views
-const DashboardView        = lazy(() => import("@/views/DashboardView"));
-const LiveAlertsView       = lazy(() => import("@/views/LiveAlertsView"));
-const DealFlowView         = lazy(() => import("@/views/DealFlowView"));
-const IndustryNewsView     = lazy(() => import("@/views/IndustryNewsView"));
-const DistressSignalsView  = lazy(() => import("@/views/DistressSignalsView"));
-const PropertySearchView   = lazy(() => import("@/views/PropertySearchView"));
-const PropertyFeedsView    = lazy(() => import("@/views/PropertyFeedsView"));
-const MapInsightsView      = lazy(() => import("@/views/MapInsightsView"));
-const GoogleMapsView       = lazy(() => import("@/views/GoogleMapsView"));
+/**
+ * We lazy-load views. For a couple of files we try two casings (e.g. DealFlowView vs dealflowview)
+ * so we don't break your build if the file is named with different casing.
+ */
+function lazyEither<T = any>(paths: Array<() => Promise<{ default: React.ComponentType<any> }>>) {
+  return lazy(async () => {
+    for (const fn of paths) {
+      try {
+        return await fn();
+      } catch (_e) {
+        // try next path
+      }
+    }
+    throw new Error("View not found for any of the attempted import paths.");
+  });
+}
+
+// Known views (with case-safe fallbacks where useful)
+const DashboardView = lazyEither([
+  () => import("@/views/DashboardView"),
+  () => import("@/views/dashboardview"),
+]);
+
+const DealFlowView = lazyEither([
+  () => import("@/views/DealFlowView"),
+  () => import("@/views/dealflowview"),
+]);
+
+const GoogleMapsEngineView = lazyEither([
+  () => import("@/views/GoogleMapsEngineView"),
+  () => import("@/views/GoogleMapsEngine"),
+  () => import("@/views/googlemapsengineview"),
+]);
+
+// ✅ New page you added earlier
 const OperatorMatchingView = lazy(() => import("@/views/OperatorMatchingView"));
-const RequirementsView     = lazy(() => import("@/views/RequirementsView"));
-const AgentsView           = lazy(() => import("@/views/AgentsView"));
-const ScraperStatusView    = lazy(() => import("@/views/ScraperStatusView"));
-const HealthView           = lazy(() => import("@/views/HealthView"));
+
+function Loading() {
+  return <div className="p-6 text-slate-300">Loading…</div>;
+}
 
 export default function AppRouter() {
   return (
-    <Suspense fallback={<div className="ai-main"><div className="ai-card">Loading…</div></div>}>
-      <Routes>
-        <Route element={<Layout />}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
+    <BrowserRouter>
+      <Suspense fallback={<Loading />}>
+        <Routes>
+          {/* main sections */}
+          <Route path="/dashboard" element={<DashboardView />} />
+          <Route path="/deal-flow" element={<DealFlowView />} />
+          <Route path="/google-maps-engine" element={<GoogleMapsEngineView />} />
 
-          <Route path="/dashboard"         element={<PageWrapper title="Dashboard"><DashboardView /></PageWrapper>} />
-          <Route path="/live-alerts"       element={<PageWrapper title="Live Alerts"><LiveAlertsView /></PageWrapper>} />
-          <Route path="/deal-flow"         element={<PageWrapper title="Deal Flow"><DealFlowView /></PageWrapper>} />
-          <Route path="/industry-news"     element={<PageWrapper title="Industry News"><IndustryNewsView /></PageWrapper>} />
-          <Route path="/distress-signals"  element={<PageWrapper title="Distress Signals"><DistressSignalsView /></PageWrapper>} />
-          <Route path="/property-search"   element={<PageWrapper title="Property Search"><PropertySearchView /></PageWrapper>} />
-          <Route path="/property-feeds"    element={<PageWrapper title="Property Feeds"><PropertyFeedsView /></PageWrapper>} />
-          <Route path="/map-insights"      element={<PageWrapper title="Map Insights"><MapInsightsView /></PageWrapper>} />
-          <Route path="/google-maps-engine"element={<PageWrapper title="Google Maps Engine"><GoogleMapsView /></PageWrapper>} />
-          <Route path="/operator-matching" element={<PageWrapper title="Operator Matching"><OperatorMatchingView /></PageWrapper>} />
-          <Route path="/requirements"      element={<PageWrapper title="Operator Requirements"><RequirementsView /></PageWrapper>} />
-          <Route path="/agents"            element={<PageWrapper title="Agents & Landlords"><AgentsView /></PageWrapper>} />
-          <Route path="/scraper-status"    element={<PageWrapper title="Scraper Status"><ScraperStatusView /></PageWrapper>} />
+          {/* new route */}
+          <Route path="/operator-matching" element={<OperatorMatchingView />} />
 
-          {/* Health page (no extra wrapper needed, but allowed) */}
-          <Route path="/health" element={<HealthView />} />
-
+          {/* default / unknown -> dashboard */}
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Route>
-      </Routes>
-    </Suspense>
+        </Routes>
+      </Suspense>
+    </BrowserRouter>
   );
 }
