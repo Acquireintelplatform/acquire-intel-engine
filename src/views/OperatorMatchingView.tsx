@@ -1,325 +1,326 @@
-// frontend/src/pages/OperatorMatchingView.tsx
+// src/views/OperatorMatchingView.tsx
 import React, { useEffect, useMemo, useState } from "react";
 
-type Requirement = {
+type SearchItem = {
   id: number;
-  operatorId: number | null;
-  name: string; // operator name
-  preferredLocations: string[]; // array of city/area names
-  notes: string | null;
+  operatorName: string | null;
+  preferredLocations: string[];
+  sizeMin?: number | null;
+  sizeMax?: number | null;
+  budgetGBP?: number | null;
+  category?: string | null;
+  notes?: string | null;
   createdAt?: string;
-  packUrl?: string | null; // optional link to a PDF pack if you store it
 };
 
 const API_BASE =
-  (import.meta as any).env?.VITE_API_BASE?.replace(/\/$/, "") ||
-  "https://acquire-intel-api.onrender.com";
+  (import.meta as any).env?.VITE_API_BASE ||
+  // fallback: try same-origin if not set
+  `${window.location.origin.replace(/\/$/, "")}/api`;
 
-async function api<T>(
-  path: string,
-  opts?: RequestInit
-): Promise<{ ok: boolean } & T> {
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...opts,
-  });
-  const text = await res.text();
-  let json: any;
-  try {
-    json = text ? JSON.parse(text) : {};
-  } catch {
-    json = { ok: false, error: text || "Bad JSON" };
-  }
-  if (!res.ok) {
-    throw new Error(json?.error || `HTTP ${res.status}`);
-  }
-  return json;
+function numOrNull(v: string): number | null {
+  if (!v.trim()) return null;
+  const n = Number(v.replace(/[, ]/g, ""));
+  return Number.isFinite(n) ? n : null;
 }
 
 export default function OperatorMatchingView() {
-  const [items, setItems] = useState<Requirement[]>([]);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [items, setItems] = useState<SearchItem[]>([]);
   const [q, setQ] = useState("");
-  const [showAdd, setShowAdd] = useState(false);
 
-  // form state
-  const [name, setName] = useState("");
-  const [locationsInput, setLocationsInput] = useState("");
+  // form fields
+  const [operatorName, setOperatorName] = useState("");
+  const [locations, setLocations] = useState("");
+  const [sizeMin, setSizeMin] = useState("");
+  const [sizeMax, setSizeMax] = useState("");
+  const [budgetGBP, setBudgetGBP] = useState("");
+  const [category, setCategory] = useState("");
   const [notes, setNotes] = useState("");
-  const [packUrl, setPackUrl] = useState("");
 
-  const load = async () => {
+  // load existing saved searches
+  async function fetchSearches() {
     setLoading(true);
     try {
-      const data = await api<{ count: number; items: Requirement[] }>(
-        "/api/operatorRequirements"
-      );
-      if ((data as any).ok !== false) {
-        setItems(data.items || []);
-      }
-    } catch (err) {
-      console.error(err);
-      alert(`Load failed: ${(err as Error).message}`);
+      const r = await fetch(`${API_BASE}/searches`);
+      const j = await r.json();
+      setItems(Array.isArray(j.items) ? j.items : []);
+    } catch (e) {
+      console.error(e);
+      setItems([]);
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   useEffect(() => {
-    load();
+    fetchSearches();
   }, []);
 
   const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return items;
-    return items.filter((r) => {
-      const hay =
-        [
-          r.name,
-          ...(r.preferredLocations || []),
-          r.notes || "",
-          r.packUrl || "",
-        ]
-          .join(" ")
-          .toLowerCase() || "";
-      return hay.includes(needle);
+    const t = q.trim().toLowerCase();
+    if (!t) return items;
+    return items.filter((it) => {
+      const bucket = [
+        it.operatorName ?? "",
+        it.preferredLocations?.join(", ") ?? "",
+        it.category ?? "",
+        it.notes ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      return bucket.includes(t);
     });
-  }, [q, items]);
+  }, [items, q]);
 
-  const clearForm = () => {
-    setName("");
-    setLocationsInput("");
-    setNotes("");
-    setPackUrl("");
-  };
-
-  const onCreate = async () => {
-    if (!name.trim()) {
-      alert("Operator name is required");
+  async function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!operatorName.trim()) {
+      alert("Please enter an operator name.");
       return;
     }
-    const preferredLocations = locationsInput
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
 
+    const payload = {
+      operatorName: operatorName.trim(),
+      preferredLocations: locations
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+      sizeMin: numOrNull(sizeMin),
+      sizeMax: numOrNull(sizeMax),
+      budgetGBP: numOrNull(budgetGBP),
+      category: category.trim() || null,
+      notes: notes.trim() || null,
+    };
+
+    setSaving(true);
     try {
-      const body: any = {
-        name: name.trim(),
-        preferredLocations,
-        notes: notes.trim() || null,
-      };
-      if (packUrl.trim()) body.packUrl = packUrl.trim();
-
-      const data = await api<{ item: Requirement }>("/api/operatorRequirements", {
+      const r = await fetch(`${API_BASE}/searches`, {
         method: "POST",
-        body: JSON.stringify(body),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
-
-      if ((data as any).ok === false) {
-        throw new Error((data as any).error || "Failed");
+      const j = await r.json();
+      if (j?.ok) {
+        // refresh list and clear form
+        await fetchSearches();
+        setOperatorName("");
+        setLocations("");
+        setSizeMin("");
+        setSizeMax("");
+        setBudgetGBP("");
+        setCategory("");
+        setNotes("");
+      } else {
+        alert(j?.error || "Failed to create requirement");
       }
-
-      setItems((prev) => [data.item, ...prev]);
-      clearForm();
-      setShowAdd(false);
-    } catch (err) {
-      console.error(err);
-      alert(`Create failed: ${(err as Error).message}`);
+    } catch (e: any) {
+      console.error(e);
+      alert("Network error creating requirement");
+    } finally {
+      setSaving(false);
     }
-  };
+  }
 
-  const onDelete = async (id: number) => {
-    if (!confirm("Delete this requirement?")) return;
+  async function handleDelete(id: number) {
+    if (!confirm("Delete this saved requirement?")) return;
     try {
-      const data = await api<{ ok: boolean }>(`/api/operatorRequirements/${id}`, {
-        method: "DELETE",
-      });
-      if ((data as any).ok === false) {
-        throw new Error((data as any).error || "Delete failed");
+      const r = await fetch(`${API_BASE}/searches/${id}`, { method: "DELETE" });
+      const j = await r.json();
+      if (j?.ok) {
+        setItems((prev) => prev.filter((x) => x.id !== id));
+      } else {
+        alert(j?.error || "Delete failed");
       }
-      setItems((prev) => prev.filter((r) => r.id !== id));
-    } catch (err) {
-      console.error(err);
-      alert(`Delete failed: ${(err as Error).message}`);
+    } catch (e) {
+      console.error(e);
+      alert("Network error");
     }
-  };
+  }
 
   return (
-    <div className="p-6">
-      <div className="mb-4 flex items-center gap-3">
-        <h1 className="text-2xl font-semibold">Operator Matching</h1>
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-bold">Operator Matching</h1>
         <button
-          className="rounded-xl px-4 py-2 border"
-          onClick={load}
+          onClick={fetchSearches}
+          className="rounded-xl px-4 py-2 border border-teal-500 hover:bg-teal-900/30"
           disabled={loading}
         >
           {loading ? "Refreshing…" : "Refresh"}
         </button>
-        <button
-          className="rounded-xl px-4 py-2 border"
-          onClick={() => setShowAdd(true)}
-        >
-          + Add requirement
-        </button>
       </div>
 
-      <div className="mb-4">
+      {/* Create form */}
+      <div className="rounded-2xl border border-white/10 p-4 bg-white/5">
+        <h2 className="text-xl font-semibold mb-3">Add requirement</h2>
+        <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="col-span-1">
+            <label className="block text-sm mb-1">Operator *</label>
+            <input
+              className="w-full rounded-xl bg-black/30 border border-white/10 px-3 py-2"
+              value={operatorName}
+              onChange={(e) => setOperatorName(e.target.value)}
+              placeholder="e.g. Nando’s"
+            />
+          </div>
+
+          <div className="col-span-1">
+            <label className="block text-sm mb-1">Preferred locations (comma-separated)</label>
+            <input
+              className="w-full rounded-xl bg-black/30 border border-white/10 px-3 py-2"
+              value={locations}
+              onChange={(e) => setLocations(e.target.value)}
+              placeholder="London, Birmingham, Manchester"
+            />
+          </div>
+
+          <div className="col-span-1">
+            <label className="block text-sm mb-1">Size min (sq ft)</label>
+            <input
+              className="w-full rounded-xl bg-black/30 border border-white/10 px-3 py-2"
+              value={sizeMin}
+              onChange={(e) => setSizeMin(e.target.value)}
+              inputMode="numeric"
+              placeholder="1500"
+            />
+          </div>
+
+          <div className="col-span-1">
+            <label className="block text-sm mb-1">Size max (sq ft)</label>
+            <input
+              className="w-full rounded-xl bg-black/30 border border-white/10 px-3 py-2"
+              value={sizeMax}
+              onChange={(e) => setSizeMax(e.target.value)}
+              inputMode="numeric"
+              placeholder="3500"
+            />
+          </div>
+
+          <div className="col-span-1">
+            <label className="block text-sm mb-1">Budget (GBP)</label>
+            <input
+              className="w-full rounded-xl bg-black/30 border border-white/10 px-3 py-2"
+              value={budgetGBP}
+              onChange={(e) => setBudgetGBP(e.target.value)}
+              inputMode="numeric"
+              placeholder="750000"
+            />
+          </div>
+
+          <div className="col-span-1">
+            <label className="block text-sm mb-1">Category / Sector</label>
+            <input
+              className="w-full rounded-xl bg-black/30 border border-white/10 px-3 py-2"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              placeholder="Food & Beverage"
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm mb-1">Notes</label>
+            <textarea
+              className="w-full rounded-xl bg-black/30 border border-white/10 px-3 py-2"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              placeholder="Any extra detail…"
+            />
+          </div>
+
+          <div className="md:col-span-2 flex gap-3">
+            <button
+              type="submit"
+              className="rounded-xl px-4 py-2 bg-teal-600 hover:bg-teal-500 text-black font-semibold"
+              disabled={saving}
+            >
+              {saving ? "Saving…" : "Save requirement"}
+            </button>
+            <button
+              type="button"
+              className="rounded-xl px-4 py-2 border border-white/10"
+              onClick={() => {
+                setOperatorName("");
+                setLocations("");
+                setSizeMin("");
+                setSizeMax("");
+                setBudgetGBP("");
+                setCategory("");
+                setNotes("");
+              }}
+            >
+              Clear
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Search/filter */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold">Saved requirements</h2>
         <input
-          className="w-full rounded-xl px-4 py-3 border bg-transparent"
-          placeholder="Search operator, locations, notes…"
+          className="rounded-xl bg-black/30 border border-white/10 px-3 py-2 w-64"
+          placeholder="Search…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
       </div>
 
-      <div className="text-sm opacity-70 mb-2">
-        Showing {filtered.length} / {items.length}
-      </div>
-
-      <div className="overflow-auto rounded-xl border">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="border-b">
-              <th className="text-left p-3">Operator</th>
-              <th className="text-left p-3">Preferred locations</th>
-              <th className="text-left p-3">Notes</th>
-              <th className="text-left p-3">Pack</th>
-              <th className="text-left p-3">Created</th>
-              <th className="text-left p-3">Action</th>
+      {/* List */}
+      <div className="rounded-2xl overflow-hidden border border-white/10">
+        <table className="w-full text-sm">
+          <thead className="bg-white/5">
+            <tr>
+              <th className="text-left px-4 py-2">Operator</th>
+              <th className="text-left px-4 py-2">Locations</th>
+              <th className="text-left px-4 py-2">Size</th>
+              <th className="text-left px-4 py-2">Budget</th>
+              <th className="text-left px-4 py-2">Category</th>
+              <th className="text-left px-4 py-2">Notes</th>
+              <th className="text-left px-4 py-2">Action</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((r) => (
-              <tr key={r.id} className="border-b last:border-0">
-                <td className="p-3 whitespace-pre-wrap">{r.name}</td>
-                <td className="p-3">
-                  {(r.preferredLocations || []).length ? (
-                    <div className="flex flex-wrap gap-2">
-                      {r.preferredLocations.map((loc, i) => (
-                        <span key={i} className="rounded-xl border px-2 py-1">
-                          {loc}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <span className="opacity-60">—</span>
-                  )}
+            {filtered.length === 0 && (
+              <tr>
+                <td className="px-4 py-6 text-center text-white/60" colSpan={7}>
+                  {loading ? "Loading…" : "No saved requirements yet."}
                 </td>
-                <td className="p-3 whitespace-pre-wrap">
-                  {r.notes || <span className="opacity-60">—</span>}
-                </td>
-                <td className="p-3">
-                  {r.packUrl ? (
-                    <a
-                      className="underline"
-                      href={r.packUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Open
-                    </a>
-                  ) : (
-                    <span className="opacity-60">—</span>
-                  )}
-                </td>
-                <td className="p-3">
-                  {r.createdAt
-                    ? new Date(r.createdAt).toLocaleString()
+              </tr>
+            )}
+            {filtered.map((it) => (
+              <tr key={it.id} className="border-t border-white/10">
+                <td className="px-4 py-2">{it.operatorName || "—"}</td>
+                <td className="px-4 py-2">
+                  {it.preferredLocations?.length
+                    ? it.preferredLocations.join(", ")
                     : "—"}
                 </td>
-                <td className="p-3">
+                <td className="px-4 py-2">
+                  {it.sizeMin || it.sizeMax
+                    ? `${it.sizeMin ?? "—"} – ${it.sizeMax ?? "—"} sq ft`
+                    : "—"}
+                </td>
+                <td className="px-4 py-2">
+                  {it.budgetGBP ? `£${it.budgetGBP.toLocaleString()}` : "—"}
+                </td>
+                <td className="px-4 py-2">{it.category || "—"}</td>
+                <td className="px-4 py-2">{it.notes || "—"}</td>
+                <td className="px-4 py-2">
                   <button
-                    className="rounded-xl px-3 py-1 border"
-                    onClick={() => onDelete(r.id)}
+                    className="rounded-lg px-3 py-1 border border-red-400/70 hover:bg-red-900/30"
+                    onClick={() => handleDelete(it.id)}
                   >
                     Delete
                   </button>
                 </td>
               </tr>
             ))}
-            {!filtered.length && (
-              <tr>
-                <td className="p-6 opacity-60" colSpan={6}>
-                  No requirements yet.
-                </td>
-              </tr>
-            )}
           </tbody>
         </table>
       </div>
-
-      {/* Add modal */}
-      {showAdd && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="w-full max-w-2xl rounded-2xl border p-6 bg-[#07171b]">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-semibold">Add Requirement</h2>
-              <button
-                className="rounded-xl border px-3 py-1"
-                onClick={() => setShowAdd(false)}
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="grid gap-4">
-              <label className="grid gap-2">
-                <span>Operator name *</span>
-                <input
-                  className="rounded-xl px-4 py-3 border bg-transparent"
-                  placeholder="e.g. Nando’s"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-              </label>
-
-              <label className="grid gap-2">
-                <span>Preferred locations (comma-separated)</span>
-                <input
-                  className="rounded-xl px-4 py-3 border bg-transparent"
-                  placeholder="e.g. London, Birmingham, Manchester"
-                  value={locationsInput}
-                  onChange={(e) => setLocationsInput(e.target.value)}
-                />
-              </label>
-
-              <label className="grid gap-2">
-                <span>Notes</span>
-                <textarea
-                  rows={4}
-                  className="rounded-xl px-4 py-3 border bg-transparent"
-                  placeholder="Any constraints or special asks…"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                />
-              </label>
-
-              <label className="grid gap-2">
-                <span>Pack URL (optional)</span>
-                <input
-                  className="rounded-xl px-4 py-3 border bg-transparent"
-                  placeholder="https://…/your-pack.pdf"
-                  value={packUrl}
-                  onChange={(e) => setPackUrl(e.target.value)}
-                />
-              </label>
-            </div>
-
-            <div className="mt-6 flex gap-3">
-              <button className="rounded-xl px-4 py-2 border" onClick={onCreate}>
-                Create
-              </button>
-              <button
-                className="rounded-xl px-4 py-2 border"
-                onClick={() => setShowAdd(false)}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
