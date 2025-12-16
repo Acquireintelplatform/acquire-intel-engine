@@ -1,119 +1,104 @@
 // src/App.tsx
-import React, { Suspense, lazy } from "react";
-import { BrowserRouter, Routes, Route, Navigate, NavLink } from "react-router-dom";
+import React from "react";
+import { BrowserRouter, Routes, Route, Link, Navigate } from "react-router-dom";
 
-/**
- * Auto-import all view files under ./views to avoid hardcoded, case-sensitive imports.
- * Vite will provide functions we can call to dynamically import each file.
- */
-const viewModules = import.meta.glob("./views/**/*.{tsx,ts,jsx,js}");
-
-type Mod = { default: React.ComponentType<any> };
-
-/** Find a module whose path ends with one of the candidate basenames (case-insensitive). */
-function findModuleByBasenames(candidates: string[]): (() => Promise<Mod>) | null {
-  const keys = Object.keys(viewModules);
-  for (const base of candidates) {
-    const needle = `/${base}`.toLowerCase();
-    const match = keys.find((k) => k.toLowerCase().endsWith(`${needle}.tsx`)
-      || k.toLowerCase().endsWith(`${needle}.ts`)
-      || k.toLowerCase().endsWith(`${needle}.jsx`)
-      || k.toLowerCase().endsWith(`${needle}.js`));
-    if (match) return viewModules[match] as () => Promise<Mod>;
+/** Minimal error boundary so we see real crash messages on screen */
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; message?: string; stack?: string }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
   }
-  return null;
-}
-
-/** Safe lazy that returns a placeholder component if nothing is found. */
-function safeLazy(candidates: string[], label: string) {
-  const loader = findModuleByBasenames(candidates);
-  if (loader) {
-    return lazy(loader);
+  static getDerivedStateFromError(err: any) {
+    return { hasError: true, message: String(err?.message ?? err), stack: String(err?.stack ?? "") };
   }
-  // Fallback: keep build green and show a helpful message at runtime.
-  return lazy(async () => ({
-    default: function MissingView() {
+  componentDidCatch(err: any) {
+    console.error("App ErrorBoundary caught:", err);
+  }
+  render() {
+    if (this.state.hasError) {
       return (
-        <div className="p-6">
-          <h1 className="text-2xl font-bold mb-2">View not found</h1>
-          <div className="opacity-80">
-            Could not locate any of: <code>{candidates.join(", ")}</code> in <code>src/views/</code>.
-          </div>
+        <div style={{ padding: 16 }}>
+          <h2 style={{ color: "#ff6b6b" }}>Something broke in the UI</h2>
+          <pre style={{ whiteSpace: "pre-wrap" }}>{this.state.message}</pre>
+          <details>
+            <summary>Stack</summary>
+            <pre style={{ whiteSpace: "pre-wrap" }}>{this.state.stack}</pre>
+          </details>
         </div>
       );
-    },
-  }));
+    }
+    return this.props.children as any;
+  }
 }
 
-/** Views (multiple case-safe candidates for each) */
-const DashboardView = safeLazy(["DashboardView", "dashboardview", "Dashboard"], "Dashboard");
-const DealFlowView = safeLazy(["DealFlowView", "dealflowview", "DealFlow"], "Deal Flow");
-const RequirementsView = safeLazy(["RequirementsView", "requirementsview", "Requirements"], "Requirements");
-const DistressSignalsView = safeLazy(["DistressSignalsView", "distresssignalsview", "DistressSignals"], "Distress Signals");
-const GoogleMapsView = safeLazy(
-  ["GoogleMapsView", "GoogleMapsEngineView", "googlemapsview", "googlemapsengineview", "GoogleMapsEngine"],
-  "Google Maps Engine"
-);
-/** ✅ This one we just added earlier */
-const OperatorMatchingView = safeLazy(["OperatorMatchingView"], "Operator Matching");
+/** Small debug banner: pings your API health and shows status */
+function ApiBanner() {
+  const [msg, setMsg] = React.useState("Checking API…");
+  const API =
+    (import.meta as any).env?.VITE_API_BASE?.replace(/\/$/, "") ||
+    "https://acquire-intel-api.onrender.com";
 
-function Loading() {
-  return <div className="p-6 text-slate-300">Loading…</div>;
-}
+  React.useEffect(() => {
+    fetch(`${API}/api/health`)
+      .then((r) => r.json())
+      .then((j) => setMsg(`API: ok • base: ${API}`))
+      .catch((e) => setMsg(`API: ERROR • base: ${API} • ${String(e)}`));
+  }, [API]);
 
-/** Simple premium sidebar */
-function Sidebar() {
-  const item =
-    "rounded-xl px-3 py-2 border border-white/10 hover:border-teal-400/40 hover:bg-white/5";
-  const active = "border-teal-400/70 bg-white/5";
   return (
-    <aside className="w-64 p-4 border-r border-white/10 min-h-screen sticky top-0">
-      <div className="font-extrabold tracking-wide mb-4">ACQUIRE INTEL</div>
-      <nav className="grid gap-2">
-        <NavLink to="/dashboard" className={({ isActive }) => `${item} ${isActive ? active : ""}`}>Dashboard</NavLink>
-        <NavLink to="/deal-flow" className={({ isActive }) => `${item} ${isActive ? active : ""}`}>Deal Flow</NavLink>
-        <NavLink to="/distress-signals" className={({ isActive }) => `${item} ${isActive ? active : ""}`}>Distress Signals</NavLink>
-        <NavLink to="/requirements" className={({ isActive }) => `${item} ${isActive ? active : ""}`}>Requirements</NavLink>
-        <NavLink to="/google-maps-engine" className={({ isActive }) => `${item} ${isActive ? active : ""}`}>Google Maps Engine</NavLink>
-        {/* ✅ New */}
-        <NavLink to="/operator-matching" className={({ isActive }) => `${item} ${isActive ? active : ""}`}>Operator Matching</NavLink>
-      </nav>
-      <div className="mt-6 text-xs opacity-60">
-        API:{" "}
-        <a
-          className="underline"
-          href="https://acquire-intel-api.onrender.com/api/health"
-          target="_blank"
-          rel="noreferrer"
-        >
-          /api/health
-        </a>
-      </div>
-    </aside>
+    <div style={{ padding: 8, fontSize: 12, opacity: 0.8 }}>
+      {msg}
+    </div>
+  );
+}
+
+/** ---- Import ONLY the Deal Flow view for now ----
+ * The file name is PascalCase: src/views/DealFlowView.tsx
+ */
+import DealFlowView from "./views/DealFlowView";
+
+/** Tiny placeholders so routes exist but don’t import heavy code yet */
+function Placeholder({ title }: { title: string }) {
+  return (
+    <div style={{ padding: 24 }}>
+      <h2>{title}</h2>
+      <p>Placeholder route (kept minimal while we debug).</p>
+    </div>
   );
 }
 
 export default function App() {
   return (
     <BrowserRouter>
-      <div className="flex">
-        <Sidebar />
-        <main className="flex-1 min-h-screen">
-          <Suspense fallback={<Loading />}>
-            <Routes>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<DashboardView />} />
-              <Route path="/deal-flow" element={<DealFlowView />} />
-              <Route path="/requirements" element={<RequirementsView />} />
-              <Route path="/distress-signals" element={<DistressSignalsView />} />
-              <Route path="/google-maps-engine" element={<GoogleMapsView />} />
-              {/* ✅ New route */}
-              <Route path="/operator-matching" element={<OperatorMatchingView />} />
-              <Route path="*" element={<Navigate to="/dashboard" replace />} />
-            </Routes>
-          </Suspense>
-        </main>
-      </div>
+      <ErrorBoundary>
+        <div style={{ padding: 16 }}>
+          <h1 style={{ marginBottom: 8 }}>ACQUIRE INTEL</h1>
+          <ApiBanner />
+          <nav style={{ display: "flex", gap: 12, margin: "12px 0" }}>
+            <Link to="/dashboard">Dashboard</Link>
+            <Link to="/deal-flow">Deal Flow</Link>
+            <Link to="/google-maps-engine">Google Maps</Link>
+            <Link to="/operator-matching">Operator Matching</Link>
+          </nav>
+
+          <Routes>
+            {/* Keep only Deal Flow as the real page */}
+            <Route path="/deal-flow" element={<DealFlowView />} />
+
+            {/* Lightweight placeholders for the rest while we debug */}
+            <Route path="/dashboard" element={<Placeholder title="Dashboard" />} />
+            <Route path="/google-maps-engine" element={<Placeholder title="Google Maps" />} />
+            <Route path="/operator-matching" element={<Placeholder title="Operator Matching" />} />
+
+            {/* Default -> Deal Flow */}
+            <Route path="/" element={<Navigate to="/deal-flow" replace />} />
+            <Route path="*" element={<Placeholder title="Not found" />} />
+          </Routes>
+        </div>
+      </ErrorBoundary>
     </BrowserRouter>
   );
 }
