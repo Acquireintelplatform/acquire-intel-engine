@@ -1,7 +1,7 @@
 // src/views/DealFlowView.tsx
 import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 
-/* API base (same pattern you used elsewhere) */
+/* API base */
 const API_BASE: string =
   (import.meta as any).env?.VITE_API_URL ||
   (import.meta as any).env?.VITE_API_BASE ||
@@ -64,11 +64,24 @@ function download(filename: string, text: string, mime = "text/plain;charset=utf
   URL.revokeObjectURL(url);
 }
 
-/* API */
+/* API (with strict error handling) */
+async function strictJson(r: Response) {
+  let data: any = null;
+  try {
+    data = await r.json();
+  } catch {
+    // ignore parse errors; will throw below
+  }
+  if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
+  if (data && typeof data === "object" && "ok" in data && data.ok === false) {
+    throw new Error(data?.error || "Request failed");
+  }
+  return data;
+}
+
 async function apiGet<T>(path: string): Promise<T> {
-  const r = await fetch(`${API_BASE}${path}`);
-  if (!r.ok) throw new Error(`${r.status} ${path}`);
-  return r.json();
+  const r = await fetch(`${API_BASE}${path}`, { method: "GET" });
+  return strictJson(r);
 }
 async function apiPost<T>(path: string, body: any): Promise<T> {
   const r = await fetch(`${API_BASE}${path}`, {
@@ -76,8 +89,7 @@ async function apiPost<T>(path: string, body: any): Promise<T> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!r.ok) throw new Error(`${r.status} ${path}`);
-  return r.json();
+  return strictJson(r);
 }
 
 /* View */
@@ -88,7 +100,7 @@ export default function DealFlowView(): JSX.Element {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string>("");
 
-  // Add-modal state
+  // Add modal
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Deal>({
     title: "",
@@ -98,6 +110,8 @@ export default function DealFlowView(): JSX.Element {
     location: "",
     notes: "",
   });
+  const [formBusy, setFormBusy] = useState(false);
+  const [formError, setFormError] = useState<string>("");
 
   const showMsg = (s: string) => {
     setMsg(s);
@@ -174,70 +188,68 @@ export default function DealFlowView(): JSX.Element {
     }
   };
 
-  /* ===== Modal controls that actually close ===== */
-
+  /* Modal controls */
   const onOpen = () => {
     setForm({ title: "", stage: "New", valueGBP: undefined, sector: "", location: "", notes: "" });
+    setFormError("");
     setOpen(true);
-    document.body.style.overflow = "hidden"; // lock scroll
+    document.body.style.overflow = "hidden";
+  };
+  const onClose = () => {
+    setOpen(false);
+    setFormBusy(false);
+    setFormError("");
+    document.body.style.overflow = "";
   };
 
-  const onClose = useCallback(() => {
-    setOpen(false);
-    document.body.style.overflow = ""; // unlock scroll
-  }, []);
-
-  // close on Esc
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  // click backdrop to close
+  // backdrop & esc
   const backdropRef = useRef<HTMLDivElement | null>(null);
   const onBackdropMouseDown = (e: React.MouseEvent) => {
     if (e.target === backdropRef.current) onClose();
   };
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
 
+  // Create deal with explicit error surfacing
   const create = async () => {
+    setFormError("");
     const payload: Deal = {
       title: (form.title || "").trim(),
       stage: form.stage || "New",
       valueGBP:
-        typeof form.valueGBP === "number"
-          ? form.valueGBP
-          : Number.isFinite(Number(form.valueGBP))
-          ? Number(form.valueGBP)
-          : undefined,
+        form.valueGBP === null || form.valueGBP === undefined || form.valueGBP === ("" as any)
+          ? undefined
+          : Number(form.valueGBP),
       sector: (form.sector || "").trim() || undefined,
       location: (form.location || "").trim() || undefined,
       notes: (form.notes || "").trim() || undefined,
     };
     if (!payload.title) {
-      showMsg("Title is required");
+      setFormError("Title is required.");
       return;
     }
 
-    setBusy(true);
+    setFormBusy(true);
     try {
-      await apiPost("/api/deals", payload);
-      await load();
-      onClose(); // CLOSE after successful save
+      const data = await apiPost<{ ok: boolean; item: Deal }>("/api/deals", payload);
+      // if backend returns the new item, we can optimistically add; otherwise just reload
+      if (data?.item) setItems((prev) => [data.item, ...prev]);
+      else await load();
       showMsg("Created");
+      onClose();
     } catch (e: any) {
-      showMsg(e?.message || "Create failed");
+      setFormError(e?.message || "Create failed");
     } finally {
-      setBusy(false);
+      setFormBusy(false);
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Header / actions */}
       <section
         style={{
           borderRadius: 16,
@@ -293,7 +305,6 @@ export default function DealFlowView(): JSX.Element {
         </div>
       </section>
 
-      {/* Table */}
       <section
         style={{
           borderRadius: 16,
@@ -370,12 +381,18 @@ export default function DealFlowView(): JSX.Element {
               boxShadow: "0 24px 80px rgba(0,0,0,0.45)",
             }}
           >
-            <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center justify-between mb-2">
               <h3 className="text-lg font-extrabold">Add Deal</h3>
-              <button className="brand-btn" onClick={onClose}>
+              <button className="brand-btn" onClick={onClose} disabled={formBusy}>
                 Close
               </button>
             </div>
+
+            {formError && (
+              <div className="mb-3 text-red-400 text-sm border border-red-400/40 rounded-md px-3 py-2 bg-red-500/5">
+                {formError}
+              </div>
+            )}
 
             <div className="grid grid-cols-1 gap-3">
               <div>
@@ -385,6 +402,7 @@ export default function DealFlowView(): JSX.Element {
                   value={form.title}
                   onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
                   placeholder="e.g., Prime retail corner — Oxford Circus"
+                  disabled={formBusy}
                 />
               </div>
 
@@ -394,6 +412,7 @@ export default function DealFlowView(): JSX.Element {
                   className="w-full border rounded-md px-3 py-2 text-sm bg-transparent"
                   value={form.stage}
                   onChange={(e) => setForm((f) => ({ ...f, stage: e.target.value as Stage }))}
+                  disabled={formBusy}
                 >
                   {STAGES.map((s) => (
                     <option key={s} value={s}>
@@ -408,9 +427,15 @@ export default function DealFlowView(): JSX.Element {
                 <input
                   className="w-full border rounded-md px-3 py-2 text-sm bg-transparent"
                   value={form.valueGBP ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, valueGBP: e.target.value === "" ? undefined : Number(e.target.value) }))}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      valueGBP: e.target.value === "" ? undefined : Number(e.target.value),
+                    }))
+                  }
                   placeholder="e.g., 27500000"
                   inputMode="numeric"
+                  disabled={formBusy}
                 />
               </div>
 
@@ -421,6 +446,7 @@ export default function DealFlowView(): JSX.Element {
                   value={form.sector ?? ""}
                   onChange={(e) => setForm((f) => ({ ...f, sector: e.target.value }))}
                   placeholder="e.g., Retail / Food & Beverage / Shopping malls"
+                  disabled={formBusy}
                 />
               </div>
 
@@ -431,6 +457,7 @@ export default function DealFlowView(): JSX.Element {
                   value={form.location ?? ""}
                   onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
                   placeholder="e.g., Oxford Circus, London"
+                  disabled={formBusy}
                 />
               </div>
 
@@ -442,14 +469,15 @@ export default function DealFlowView(): JSX.Element {
                   value={form.notes ?? ""}
                   onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
                   placeholder="Optional notes…"
+                  disabled={formBusy}
                 />
               </div>
 
               <div className="flex items-center gap-3 mt-2">
-                <button className="brand-btn" data-variant="primary" onClick={create} disabled={busy}>
-                  Create deal
+                <button className="brand-btn" data-variant="primary" onClick={create} disabled={formBusy}>
+                  {formBusy ? "Creating…" : "Create deal"}
                 </button>
-                <button className="brand-btn" onClick={onClose}>
+                <button className="brand-btn" onClick={onClose} disabled={formBusy}>
                   Cancel
                 </button>
               </div>
