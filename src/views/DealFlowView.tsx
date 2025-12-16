@@ -1,255 +1,487 @@
 // src/views/DealFlowView.tsx
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
-/* API base */
+/* ===== API base ===== */
 const API_BASE: string =
   (import.meta as any).env?.VITE_API_URL ||
   (import.meta as any).env?.VITE_API_BASE ||
   (import.meta as any).env?.VITE_API_BASE_URL ||
   "https://acquire-intel-api.onrender.com";
 
-/* Types */
-type Stage =
-  | "New"
-  | "Sourcing"
-  | "Underwriting"
-  | "Offer Made"
-  | "Negotiation"
-  | "In Legals"
-  | "Completed"
-  | "Review"
-  | "Screening";
-
+/* ===== Types ===== */
 type Deal = {
-  id?: number;
+  id: number;
   title: string;
-  stage: Stage;
-  valueGBP?: number | null;
+  stage:
+    | "Sourcing"
+    | "Underwriting"
+    | "Offer Made"
+    | "Negotiation"
+    | "In Legals"
+    | "Completed"
+    | "New"
+    | "Review"
+    | "Heads"
+    | "Screening";
+  valueGBP?: number | string | null;
   sector?: string;
   location?: string;
   notes?: string;
   updatedAt?: string;
 };
 
-const STAGES: Stage[] = [
-  "New",
+type ListResponse = { ok: boolean; items?: Deal[]; count?: number };
+type ItemResponse = { ok: boolean; item?: Deal };
+
+/* ===== Helpers ===== */
+const STAGES: Deal["stage"][] = [
   "Sourcing",
   "Underwriting",
   "Offer Made",
   "Negotiation",
   "In Legals",
   "Completed",
+  "New",
   "Review",
+  "Heads",
   "Screening",
 ];
 
-/* Helpers */
-const fmtGBP = (n?: number | null) =>
-  typeof n === "number" && !isNaN(n)
-    ? n.toLocaleString("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 })
-    : "—";
-
-const csvEsc = (s: any) => {
-  const v = s == null ? "" : String(s);
-  return `"${v.replace(/"/g, '""')}"`;
+const money = (n?: number | string | null) => {
+  if (n == null || n === "") return "—";
+  const x = typeof n === "string" ? Number(n) : n;
+  if (!isFinite(x)) return "—";
+  return x.toLocaleString("en-GB", { style: "currency", currency: "GBP", maximumFractionDigits: 0 });
 };
 
-function download(filename: string, text: string, mime = "text/plain;charset=utf-8") {
-  const blob = new Blob([text], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+async function getJSON<T>(path: string, init?: RequestInit): Promise<T> {
+  const r = await fetch(`${API_BASE}${path}`, init);
+  if (!r.ok) throw new Error(`${r.status} ${path}`);
+  return r.json();
 }
 
-/* API (with strict error handling) */
-async function strictJson(r: Response) {
-  let data: any = null;
-  try {
-    data = await r.json();
-  } catch {
-    // ignore parse errors; will throw below
+/* ===== Inline editable cell ===== */
+function EditableCell<T extends keyof Deal>(props: {
+  row: Deal;
+  field: T;
+  type?: "text" | "number" | "select" | "textarea";
+  options?: string[];
+  onSave: (id: number, patch: Partial<Deal>) => Promise<void>;
+  title?: string;
+}) {
+  const { row, field, type = "text", options, onSave, title } = props;
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState<any>(row[field] ?? "");
+
+  useEffect(() => setValue(row[field] ?? ""), [row, field]);
+
+  async function commit() {
+    if (!editing) return;
+    setEditing(false);
+    const patch: any = {};
+    patch[field] = type === "number" ? (value === "" ? null : Number(value)) : value;
+    if (patch[field] === row[field]) return;
+    await onSave(row.id, patch);
   }
-  if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
-  if (data && typeof data === "object" && "ok" in data && data.ok === false) {
-    throw new Error(data?.error || "Request failed");
+
+  if (!editing) {
+    const display =
+      field === "valueGBP" ? money(row.valueGBP as any) : (row[field] as any) || "—";
+    return (
+      <div
+        role="button"
+        title={title || "Click to edit"}
+        onClick={() => setEditing(true)}
+        style={{ cursor: "text" }}
+      >
+        {display}
+      </div>
+    );
   }
-  return data;
+
+  if (type === "select" && options) {
+    return (
+      <select
+        autoFocus
+        value={value ?? ""}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => e.key === "Enter" && commit()}
+        className="w-full bg-transparent border rounded-md px-2 py-1"
+      >
+        {options.map((o) => (
+          <option key={o} value={o}>
+            {o}
+          </option>
+        ))}
+      </select>
+    );
+  }
+
+  if (type === "textarea") {
+    return (
+      <textarea
+        autoFocus
+        value={value ?? ""}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={commit}
+        className="w-full bg-transparent border rounded-md px-2 py-1"
+        rows={3}
+      />
+    );
+  }
+
+  return (
+    <input
+      autoFocus
+      type={type}
+      value={value ?? ""}
+      onChange={(e) => setValue(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === "Enter" && commit()}
+      className="w-full bg-transparent border rounded-md px-2 py-1"
+    />
+  );
 }
 
-async function apiGet<T>(path: string): Promise<T> {
-  const r = await fetch(`${API_BASE}${path}`, { method: "GET" });
-  return strictJson(r);
-}
-async function apiPost<T>(path: string, body: any): Promise<T> {
-  const r = await fetch(`${API_BASE}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  return strictJson(r);
-}
+/* ===== Add Deal Modal ===== */
+function AddDealModal(props: {
+  open: boolean;
+  onClose: () => void;
+  onCreated: (created: Deal) => void;
+}) {
+  const { open, onClose, onCreated } = props;
 
-/* View */
-export default function DealFlowView(): JSX.Element {
-  const [items, setItems] = useState<Deal[]>([]);
-  const [q, setQ] = useState("");
-  const [stageFilter, setStageFilter] = useState<"All" | Stage>("All");
-  const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState<string>("");
-
-  // Add modal
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<Deal>({
+  const [form, setForm] = useState<Partial<Deal>>({
     title: "",
     stage: "New",
-    valueGBP: undefined,
+    valueGBP: "",
     sector: "",
     location: "",
     notes: "",
   });
-  const [formBusy, setFormBusy] = useState(false);
-  const [formError, setFormError] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
 
-  const showMsg = (s: string) => {
-    setMsg(s);
-    setTimeout(() => setMsg(""), 1800);
-  };
+  useEffect(() => {
+    if (open) {
+      setForm({
+        title: "",
+        stage: "New",
+        valueGBP: "",
+        sector: "",
+        location: "",
+        notes: "",
+      });
+      setErr("");
+      setBusy(false);
+    }
+  }, [open]);
 
-  const load = useCallback(async () => {
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.title?.trim()) {
+      setErr("Title is required");
+      return;
+    }
     setBusy(true);
     try {
-      const data = await apiGet<{ ok: boolean; items: Deal[] }>("/api/deals");
-      setItems(Array.isArray(data.items) ? data.items : []);
-      showMsg("Loaded");
+      const res = await getJSON<ItemResponse>("/api/deals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: form.title?.trim(),
+          stage: form.stage,
+          valueGBP:
+            form.valueGBP === "" || form.valueGBP == null ? null : Number(form.valueGBP),
+          sector: form.sector?.trim() || "",
+          location: form.location?.trim() || "",
+          notes: form.notes?.trim() || "",
+        }),
+      });
+      if (res?.ok && res.item) {
+        onCreated(res.item);
+        onClose();
+      } else {
+        setErr("Create failed");
+      }
     } catch (e: any) {
-      showMsg(e?.message || "Load failed");
+      setErr(e?.message || "Create failed");
     } finally {
       setBusy(false);
     }
-  }, []);
+  }
 
-  useEffect(() => {
-    load().catch(() => void 0);
-  }, [load]);
+  if (!open) return null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Add Deal"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.45)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 9999,
+      }}
+    >
+      <div
+        className="teal-glow"
+        style={{
+          width: "100%",
+          maxWidth: 560,
+          background: "#0e1114",
+          borderRadius: 16,
+          padding: 20,
+          border: "1px solid rgba(0,255,255,0.15)",
+          boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
+        }}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h3 style={{ color: "#cfffff", fontSize: 18, fontWeight: 800 }}>Add Deal</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3 py-1 border rounded-md"
+            style={{ borderColor: "rgba(255,255,255,0.2)" }}
+          >
+            Close
+          </button>
+        </div>
+
+        {err && <div className="text-red-500 text-sm mb-2">{err}</div>}
+
+        <form className="space-y-3" onSubmit={submit}>
+          <div>
+            <label className="block text-xs mb-1 opacity-80">Title *</label>
+            <input
+              className="w-full border rounded-md px-2 py-1.5 bg-transparent"
+              value={form.title || ""}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs mb-1 opacity-80">Stage</label>
+              <select
+                className="w-full border rounded-md px-2 py-1.5 bg-transparent"
+                value={form.stage || "New"}
+                onChange={(e) => setForm((f) => ({ ...f, stage: e.target.value as Deal["stage"] }))}
+              >
+                {STAGES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs mb-1 opacity-80">Value (GBP)</label>
+              <input
+                type="number"
+                className="w-full border rounded-md px-2 py-1.5 bg-transparent"
+                value={form.valueGBP as any}
+                onChange={(e) => setForm((f) => ({ ...f, valueGBP: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs mb-1 opacity-80">Sector</label>
+            <input
+              className="w-full border rounded-md px-2 py-1.5 bg-transparent"
+              value={form.sector || ""}
+              onChange={(e) => setForm((f) => ({ ...f, sector: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs mb-1 opacity-80">Location</label>
+            <input
+              className="w-full border rounded-md px-2 py-1.5 bg-transparent"
+              value={form.location || ""}
+              onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs mb-1 opacity-80">Notes</label>
+            <textarea
+              className="w-full border rounded-md px-2 py-1.5 bg-transparent"
+              rows={3}
+              value={form.notes || ""}
+              onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+            />
+          </div>
+
+          <div className="flex gap-2 justify-end">
+            <button
+              type="button"
+              className="px-3 py-1.5 border rounded-md"
+              onClick={onClose}
+              disabled={busy}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-3 py-1.5 border rounded-md"
+              style={{ borderColor: "rgba(0,255,255,0.25)", background: "rgba(0,255,255,0.12)" }}
+              disabled={busy}
+            >
+              Create deal
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+/* ===== Main View ===== */
+export default function DealFlowView(): JSX.Element {
+  const [items, setItems] = useState<Deal[]>([]);
+  const [q, setQ] = useState("");
+  const [stage, setStage] = useState<string>("All");
+  const [loading, setLoading] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [msg, setMsg] = useState("");
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return items.filter((d) => {
-      if (stageFilter !== "All" && d.stage !== stageFilter) return false;
+      const byStage = stage === "All" || d.stage === stage;
+      if (!byStage) return false;
       if (!needle) return true;
-      const hay = [
-        d.title,
-        d.stage,
-        d.sector,
-        d.location,
-        d.notes,
-        typeof d.valueGBP === "number" ? String(d.valueGBP) : "",
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+      const hay =
+        `${d.title} ${d.sector} ${d.location} ${d.notes}`.toLowerCase();
       return hay.includes(needle);
     });
-  }, [items, q, stageFilter]);
+  }, [items, q, stage]);
 
-  const exportCsv = () => {
-    const header = ["id", "title", "stage", "valueGBP", "sector", "location", "updatedAt", "notes"].join(",");
+  async function load() {
+    try {
+      setLoading(true);
+      const res = await getJSON<ListResponse>("/api/deals");
+      setItems(res?.items || []);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn("GET /api/deals failed", e);
+      setItems([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => {
+    load();
+  }, []);
+
+  async function save(id: number, patch: Partial<Deal>) {
+    const res = await getJSON<ItemResponse>(`/api/deals/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(patch),
+    });
+    if (res?.ok && res.item) {
+      setItems((prev) => prev.map((d) => (d.id === id ? res.item! : d)));
+      setMsg("Saved");
+      setTimeout(() => setMsg(""), 1200);
+    }
+  }
+
+  async function remove(id: number) {
+    if (!confirm("Delete this deal?")) return;
+    try {
+      await getJSON(`/api/deals/${id}`, { method: "DELETE" });
+      setItems((prev) => prev.filter((d) => d.id !== id));
+    } catch {
+      // ignore
+    }
+  }
+
+  function exportCsv() {
+    const header = ["id", "title", "stage", "valueGBP", "sector", "location", "notes", "updatedAt"];
     const lines = filtered.map((d) =>
       [
-        d.id ?? "",
-        d.title ?? "",
-        d.stage ?? "",
+        d.id,
+        d.title,
+        d.stage,
         d.valueGBP ?? "",
         d.sector ?? "",
         d.location ?? "",
+        (d.notes ?? "").replace(/\r?\n/g, " "),
         d.updatedAt ?? "",
-        d.notes ?? "",
       ]
-        .map(csvEsc)
-        .join(","),
+        .map((s) => `"${String(s).replace(/"/g, '""')}"`)
+        .join(",")
     );
-    download(`deal-flow-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`, [header, ...lines].join("\r\n"), "text/csv;charset=utf-8");
-    showMsg("CSV exported");
-  };
-
-  const seed = async () => {
-    setBusy(true);
-    try {
-      await apiPost("/api/deals/seed", {});
-      await load();
-      showMsg("Seeded");
-    } catch (e: any) {
-      showMsg(e?.message || "Seed failed");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  /* Modal controls */
-  const onOpen = () => {
-    setForm({ title: "", stage: "New", valueGBP: undefined, sector: "", location: "", notes: "" });
-    setFormError("");
-    setOpen(true);
-    document.body.style.overflow = "hidden";
-  };
-  const onClose = () => {
-    setOpen(false);
-    setFormBusy(false);
-    setFormError("");
-    document.body.style.overflow = "";
-  };
-
-  // backdrop & esc
-  const backdropRef = useRef<HTMLDivElement | null>(null);
-  const onBackdropMouseDown = (e: React.MouseEvent) => {
-    if (e.target === backdropRef.current) onClose();
-  };
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
-
-  // Create deal with explicit error surfacing
-  const create = async () => {
-    setFormError("");
-    const payload: Deal = {
-      title: (form.title || "").trim(),
-      stage: form.stage || "New",
-      valueGBP:
-        form.valueGBP === null || form.valueGBP === undefined || form.valueGBP === ("" as any)
-          ? undefined
-          : Number(form.valueGBP),
-      sector: (form.sector || "").trim() || undefined,
-      location: (form.location || "").trim() || undefined,
-      notes: (form.notes || "").trim() || undefined,
-    };
-    if (!payload.title) {
-      setFormError("Title is required.");
-      return;
-    }
-
-    setFormBusy(true);
-    try {
-      const data = await apiPost<{ ok: boolean; item: Deal }>("/api/deals", payload);
-      // if backend returns the new item, we can optimistically add; otherwise just reload
-      if (data?.item) setItems((prev) => [data.item, ...prev]);
-      else await load();
-      showMsg("Created");
-      onClose();
-    } catch (e: any) {
-      setFormError(e?.message || "Create failed");
-    } finally {
-      setFormBusy(false);
-    }
-  };
+    const csv = [header.join(","), ...lines].join("\r\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `deals-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Controls */}
+      <section
+        style={{
+          background: "linear-gradient(180deg, rgba(7,20,24,0.98), rgba(7,20,24,0.92))",
+          border: "1px solid rgba(0,255,255,0.18)",
+          borderRadius: 16,
+          padding: 16,
+        }}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="brand-title">Deal Flow</h2>
+          {msg && <span className="text-green-500 text-xs">{msg}</span>}
+        </div>
+
+        <div className="flex flex-wrap gap-3 mt-2">
+          <button className="brand-btn" onClick={load} disabled={loading}>
+            Refresh
+          </button>
+          <button className="brand-btn" onClick={exportCsv}>
+            Export CSV
+          </button>
+          <button className="brand-btn" data-variant="primary" onClick={() => setModalOpen(true)}>
+            + Add deal
+          </button>
+        </div>
+
+        <div className="mt-3 flex flex-col gap-3">
+          <input
+            placeholder="Search title, sector, location…"
+            className="w-full border rounded-md px-2 py-1.5 bg-transparent"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
+          <select
+            className="w-full border rounded-md px-2 py-1.5 bg-transparent"
+            value={stage}
+            onChange={(e) => setStage(e.target.value)}
+          >
+            <option>All</option>
+            {STAGES.map((s) => (
+              <option key={s}>{s}</option>
+            ))}
+          </select>
+          <div className="text-xs opacity-70">
+            Showing {filtered.length} / {items.length} • API base: {API_BASE}
+          </div>
+        </div>
+      </section>
+
+      {/* Table */}
       <section
         style={{
           borderRadius: 16,
@@ -259,90 +491,57 @@ export default function DealFlowView(): JSX.Element {
           boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)",
         }}
       >
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <h2 className="brand-title">Deal Flow</h2>
-          <div className="flex items-center gap-3">
-            <button className="brand-btn" onClick={load} disabled={busy}>
-              Refresh
-            </button>
-            <button className="brand-btn" onClick={seed} disabled={busy}>
-              Seed demo deals
-            </button>
-            <button className="brand-btn" onClick={exportCsv} disabled={busy}>
-              Export CSV
-            </button>
-            <button className="brand-btn" data-variant="primary" onClick={onOpen} disabled={busy}>
-              + Add deal
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-3 flex flex-col gap-3">
-          <input
-            className="w-full border rounded-md px-3 py-2 text-sm bg-transparent"
-            placeholder="Search title, sector, location…"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-
-          <select
-            className="w-full border rounded-md px-3 py-2 text-sm bg-transparent"
-            value={stageFilter}
-            onChange={(e) => setStageFilter(e.target.value as any)}
-          >
-            <option value="All">All</option>
-            {STAGES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-
-          <div className="text-xs opacity-70">
-            Showing {filtered.length} / {items.length} • API base: {API_BASE}
-            {msg && <span className="ml-2 text-green-500">{msg}</span>}
-          </div>
-        </div>
-      </section>
-
-      <section
-        style={{
-          borderRadius: 16,
-          padding: 0,
-          border: "1px solid rgba(255,255,255,0.08)",
-          background: "rgba(255,255,255,0.02)",
-          overflow: "hidden",
-        }}
-      >
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto border border-white/10 rounded-xl">
           <table className="w-full text-sm">
             <thead className="text-left text-xs opacity-80">
               <tr>
-                <th className="p-3 border-b border-white/10 w-[34%]">Title</th>
-                <th className="p-3 border-b border-white/10 w-[10%]">Stage</th>
-                <th className="p-3 border-b border-white/10 w-[12%]">Value</th>
-                <th className="p-3 border-b border-white/10 w-[14%]">Sector</th>
-                <th className="p-3 border-b border-white/10 w-[18%]">Location</th>
+                <th className="p-3 border-b border-white/10 w-72">Title</th>
+                <th className="p-3 border-b border-white/10 w-40">Stage</th>
+                <th className="p-3 border-b border-white/10 w-32">Value</th>
+                <th className="p-3 border-b border-white/10 w-40">Sector</th>
+                <th className="p-3 border-b border-white/10 w-52">Location</th>
                 <th className="p-3 border-b border-white/10">Notes</th>
+                <th className="p-3 border-b border-white/10 w-24">Action</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((d) => (
-                <tr key={d.id ?? d.title}>
-                  <td className="p-3 border-b border-white/10">{d.title}</td>
-                  <td className="p-3 border-b border-white/10 whitespace-nowrap">{d.stage}</td>
-                  <td className="p-3 border-b border-white/10 whitespace-nowrap">{fmtGBP(d.valueGBP)}</td>
-                  <td className="p-3 border-b border-white/10 whitespace-nowrap">{d.sector || "—"}</td>
-                  <td className="p-3 border-b border-white/10 whitespace-nowrap">{d.location || "—"}</td>
+                <tr key={d.id} className="align-top">
                   <td className="p-3 border-b border-white/10">
-                    <div className="whitespace-pre-wrap break-words">{d.notes || "—"}</div>
+                    <EditableCell row={d} field="title" onSave={save} />
+                  </td>
+                  <td className="p-3 border-b border-white/10">
+                    <EditableCell
+                      row={d}
+                      field="stage"
+                      type="select"
+                      options={STAGES}
+                      onSave={save}
+                    />
+                  </td>
+                  <td className="p-3 border-b border-white/10">
+                    <EditableCell row={d} field="valueGBP" type="number" onSave={save} />
+                  </td>
+                  <td className="p-3 border-b border-white/10">
+                    <EditableCell row={d} field="sector" onSave={save} />
+                  </td>
+                  <td className="p-3 border-b border-white/10">
+                    <EditableCell row={d} field="location" onSave={save} />
+                  </td>
+                  <td className="p-3 border-b border-white/10">
+                    <EditableCell row={d} field="notes" type="textarea" onSave={save} />
+                  </td>
+                  <td className="p-3 border-b border-white/10">
+                    <button className="brand-btn" onClick={() => remove(d.id)}>
+                      Delete
+                    </button>
                   </td>
                 </tr>
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td className="p-6 text-center text-sm opacity-70" colSpan={6}>
-                    No deals yet.
+                  <td className="p-6 text-center text-sm" colSpan={7}>
+                    {loading ? "Loading…" : "No deals."}
                   </td>
                 </tr>
               )}
@@ -351,140 +550,11 @@ export default function DealFlowView(): JSX.Element {
         </div>
       </section>
 
-      {/* Add Deal Modal */}
-      {open && (
-        <div
-          ref={backdropRef}
-          onMouseDown={onBackdropMouseDown}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.55)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 9999,
-            padding: 16,
-          }}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Add Deal"
-            style={{
-              width: "100%",
-              maxWidth: 720,
-              background: "#0e1114",
-              borderRadius: 16,
-              padding: 20,
-              border: "1px solid rgba(0,255,255,0.15)",
-              boxShadow: "0 24px 80px rgba(0,0,0,0.45)",
-            }}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-lg font-extrabold">Add Deal</h3>
-              <button className="brand-btn" onClick={onClose} disabled={formBusy}>
-                Close
-              </button>
-            </div>
-
-            {formError && (
-              <div className="mb-3 text-red-400 text-sm border border-red-400/40 rounded-md px-3 py-2 bg-red-500/5">
-                {formError}
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 gap-3">
-              <div>
-                <label className="block text-xs mb-1 opacity-80">Title *</label>
-                <input
-                  className="w-full border rounded-md px-3 py-2 text-sm bg-transparent"
-                  value={form.title}
-                  onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                  placeholder="e.g., Prime retail corner — Oxford Circus"
-                  disabled={formBusy}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs mb-1 opacity-80">Stage</label>
-                <select
-                  className="w-full border rounded-md px-3 py-2 text-sm bg-transparent"
-                  value={form.stage}
-                  onChange={(e) => setForm((f) => ({ ...f, stage: e.target.value as Stage }))}
-                  disabled={formBusy}
-                >
-                  {STAGES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs mb-1 opacity-80">Value (GBP)</label>
-                <input
-                  className="w-full border rounded-md px-3 py-2 text-sm bg-transparent"
-                  value={form.valueGBP ?? ""}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      valueGBP: e.target.value === "" ? undefined : Number(e.target.value),
-                    }))
-                  }
-                  placeholder="e.g., 27500000"
-                  inputMode="numeric"
-                  disabled={formBusy}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs mb-1 opacity-80">Sector</label>
-                <input
-                  className="w-full border rounded-md px-3 py-2 text-sm bg-transparent"
-                  value={form.sector ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, sector: e.target.value }))}
-                  placeholder="e.g., Retail / Food & Beverage / Shopping malls"
-                  disabled={formBusy}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs mb-1 opacity-80">Location</label>
-                <input
-                  className="w-full border rounded-md px-3 py-2 text-sm bg-transparent"
-                  value={form.location ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
-                  placeholder="e.g., Oxford Circus, London"
-                  disabled={formBusy}
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs mb-1 opacity-80">Notes</label>
-                <textarea
-                  className="w-full border rounded-md px-3 py-2 text-sm bg-transparent"
-                  rows={4}
-                  value={form.notes ?? ""}
-                  onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                  placeholder="Optional notes…"
-                  disabled={formBusy}
-                />
-              </div>
-
-              <div className="flex items-center gap-3 mt-2">
-                <button className="brand-btn" data-variant="primary" onClick={create} disabled={formBusy}>
-                  {formBusy ? "Creating…" : "Create deal"}
-                </button>
-                <button className="brand-btn" onClick={onClose} disabled={formBusy}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <AddDealModal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        onCreated={(created) => setItems((prev) => [created, ...prev])}
+      />
     </div>
   );
 }
