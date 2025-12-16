@@ -1,5 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { GoogleMap, useJsApiLoader, Marker, Autocomplete } from "@react-google-maps/api";
+import {
+  GoogleMap,
+  useJsApiLoader,
+  Marker,
+  Autocomplete,
+  InfoWindow,
+} from "@react-google-maps/api";
 
 /** Exact 7 categories (API contract) */
 type Category =
@@ -43,7 +49,7 @@ const CATEGORY_LABEL: Record<Category, string> = {
   newProperties: "New properties",
 };
 
-/** Distinct colours per category (used for circle pins) */
+/** Distinct marker colours per category */
 const CATEGORY_COLOR: Record<Category, string> = {
   lateFilings: "#0dd3d3",
   leaseExpiring: "#00c2a8",
@@ -54,15 +60,19 @@ const CATEGORY_COLOR: Record<Category, string> = {
   newProperties: "#5ad66f",
 };
 
-/** Safe, built-in symbol (fixes the SVG path error) */
+const PIN_PATH =
+  "M12 2C7.6 2 4 5.6 4 10c0 5.6 8 12 8 12s8-6.4 8-12c0-4.4-3.6-8-8-8zm0 10.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z";
+
 function iconFor(category: Category): google.maps.Symbol {
+  // Why: enforce our coloured vector pin; avoid default red pin.
   return {
-    path: google.maps.SymbolPath.CIRCLE,
+    path: PIN_PATH as any,
     fillColor: CATEGORY_COLOR[category],
     fillOpacity: 0.95,
     strokeColor: "#ffffff",
-    strokeWeight: 2,
-    scale: 8, // circle radius
+    strokeWeight: 1,
+    scale: 1.2,
+    anchor: new google.maps.Point(12, 22),
   };
 }
 
@@ -127,7 +137,9 @@ async function readJsonSafe(res: Response): Promise<any | null> {
     if (t && t.trim().startsWith("{")) {
       try { return JSON.parse(t); } catch { return { text: t }; }
     }
-  } catch {}
+  } catch {
+    // ignore
+  }
   return null;
 }
 
@@ -149,6 +161,9 @@ export default function GoogleMapsView(): JSX.Element {
   const [formTitle, setFormTitle] = useState("");
   const [formType, setFormType] = useState<Category>("retail");
   const [formAddress, setFormAddress] = useState("");
+
+  // NEW: selected pin for InfoWindow
+  const [activePin, setActivePin] = useState<Pin | null>(null);
 
   const [shouldFitBounds, setShouldFitBounds] = useState<boolean>(true);
   const [health, setHealth] = useState<string>("checking…");
@@ -214,6 +229,8 @@ export default function GoogleMapsView(): JSX.Element {
       setShouldFitBounds(false);
     }, 0);
   }, [pins, selectedCats, shouldFitBounds]);
+
+  const onMapLoad = useCallback((map: google.maps.Map) => { mapRef.current = map; }, []);
 
   const onPlaceChanged = useCallback(() => {
     const place = autoRef.current?.getPlace();
@@ -361,6 +378,15 @@ export default function GoogleMapsView(): JSX.Element {
 
   const filteredPins = useMemo(() => pins.filter((p) => selectedCats.has(p.type)), [pins, selectedCats]);
 
+  // Pre-fill modal from an existing pin (Edit)
+  const openEditForPin = useCallback((pin: Pin) => {
+    setFormTitle(pin.title || "");
+    setFormType(pin.type);
+    setFormAddress(pin.address || "");
+    setPendingLatLng({ lat: pin.lat, lng: pin.lng });
+    setModalOpen(true);
+  }, []);
+
   if (loadError) return <div style={{ padding: 24 }}>Failed to load Google Maps.</div>;
   if (!isLoaded) return <div style={{ padding: 24 }}>Loading map…</div>;
 
@@ -383,23 +409,33 @@ export default function GoogleMapsView(): JSX.Element {
           <button type="button" className="teal-glow" style={actionBtn} onClick={hideAll}>
             Hide all
           </button>
-
-          <span style={infoText}>Filtered {filteredPins.length} / {pins.length} pins</span>
-          <span style={{ ...infoText, marginLeft: 12 }}>API: {health} • GET: {getStatus} • Base: {API_BASE_URL}</span>
-
           <button type="button" className="teal-glow" style={actionBtn} onClick={seedDemoPin}>
             Seed demo pin
           </button>
           <button type="button" className="teal-glow" style={actionBtn} onClick={seedDemoSet}>
             Seed demo set
           </button>
+
+          <span style={infoText}>
+            Filtered {filteredPins.length} / {pins.length} pins
+          </span>
+          <span style={{ ...infoText, marginLeft: 12 }}>
+            API: {health} • GET: {getStatus} • Base: {API_BASE_URL}
+          </span>
         </div>
 
         <div style={{ ...row, marginTop: 12 }}>
           {CATEGORIES.map((cat) => {
             const active = selectedCats.has(cat);
             return (
-              <button key={cat} type="button" className="teal-glow" onClick={() => toggleCategory(cat)} style={chip(active)} aria-pressed={active}>
+              <button
+                key={cat}
+                type="button"
+                className="teal-glow"
+                onClick={() => toggleCategory(cat)}
+                style={chip(active)}
+                aria-pressed={active}
+              >
                 {CATEGORY_LABEL[cat]}
               </button>
             );
@@ -416,7 +452,11 @@ export default function GoogleMapsView(): JSX.Element {
       {/* Map */}
       <GoogleMap
         onLoad={(m) => (mapRef.current = m)}
-        onClick={onMapClick}
+        onClick={(e) => {
+          // clicking map closes any open info window
+          setActivePin(null);
+          onMapClick(e);
+        }}
         mapContainerStyle={mapContainer}
         center={defaultCenter}
         zoom={defaultZoom}
@@ -425,7 +465,7 @@ export default function GoogleMapsView(): JSX.Element {
           mapTypeControl: false,
           fullscreenControl: false,
           clickableIcons: false,
-          gestureHandling: "greedy", // allow scroll-zoom without Ctrl
+          gestureHandling: "greedy",
         }}
       >
         {filteredPins.map((pin, idx) => (
@@ -434,8 +474,95 @@ export default function GoogleMapsView(): JSX.Element {
             position={{ lat: pin.lat, lng: pin.lng }}
             title={`${pin.title}${pin.address ? " — " + pin.address : ""}`}
             icon={iconFor(pin.type)}
+            onClick={(e) => {
+              e.domEvent?.stopPropagation?.();
+              setActivePin(pin);
+            }}
           />
         ))}
+
+        {/* Info card (InfoWindow) on marker click */}
+        {activePin && (
+          <InfoWindow
+            position={{ lat: activePin.lat, lng: activePin.lng }}
+            onCloseClick={() => setActivePin(null)}
+          >
+            <div
+              className="teal-glow"
+              style={{
+                minWidth: 240,
+                maxWidth: 300,
+                color: "#e6ffff",
+                background: "#0e1114",
+                border: "1px solid rgba(0,255,255,0.18)",
+                borderRadius: 12,
+                padding: 12,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 6 }}>
+                {activePin.title}
+              </div>
+              <div style={{ fontSize: 12, opacity: 0.9, marginBottom: 6 }}>
+                <span
+                  style={{
+                    display: "inline-block",
+                    padding: "2px 8px",
+                    borderRadius: 999,
+                    border: "1px solid rgba(255,255,255,0.12)",
+                    background: `${CATEGORY_COLOR[activePin.type]}22`,
+                    color: "#e6ffff",
+                    fontWeight: 700,
+                    marginRight: 6,
+                  }}
+                >
+                  {CATEGORY_LABEL[activePin.type]}
+                </span>
+                <span style={{ opacity: 0.85 }}>{activePin.address || "No address"}</span>
+              </div>
+              <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 10 }}>
+                {activePin.lat.toFixed(6)}, {activePin.lng.toFixed(6)}
+              </div>
+              <div style={{ display: "grid", gridAutoFlow: "column", gap: 8, justifyContent: "end" }}>
+                <button
+                  type="button"
+                  className="teal-glow"
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(0,255,255,0.25)",
+                    background: "transparent",
+                    color: "#cfffff",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                  onClick={() => setActivePin(null)}
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  className="teal-glow"
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(0,255,255,0.25)",
+                    background: "linear-gradient(135deg, rgba(0,255,255,0.18), rgba(0,255,200,0.18))",
+                    color: "#e6fffe",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                  }}
+                  onClick={() => {
+                    setActivePin(null);
+                    openEditForPin(activePin);
+                  }}
+                >
+                  Edit
+                </button>
+              </div>
+            </div>
+          </InfoWindow>
+        )}
       </GoogleMap>
 
       {/* Modal */}
@@ -453,6 +580,10 @@ export default function GoogleMapsView(): JSX.Element {
             justifyContent: "center",
             zIndex: 9999,
           }}
+          onClick={() => {
+            setModalOpen(false);
+            setPendingLatLng(null);
+          }}
         >
           <div
             className="teal-glow"
@@ -465,9 +596,10 @@ export default function GoogleMapsView(): JSX.Element {
               border: "1px solid rgba(0,255,255,0.15)",
               boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
             }}
+            onClick={(e) => e.stopPropagation()}
           >
             <h3 style={{ margin: "6px 0 14px", color: "#cfffff", fontSize: 18, fontWeight: 800 }}>
-              Add Map Pin
+              {pendingLatLng ? "Add Map Pin" : "Add Map Pin"}
             </h3>
 
             <label style={{ display: "block", fontSize: 12, letterSpacing: 0.4, marginBottom: 6, color: "rgba(255,255,255,0.7)", textTransform: "uppercase" }}>
