@@ -1,4 +1,3 @@
-// src/views/GoogleMapsView.tsx
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GoogleMap, useJsApiLoader, Marker, Autocomplete } from "@react-google-maps/api";
 
@@ -16,8 +15,8 @@ type Pin = {
   id?: string | number;
   title: string;
   type: Category;
-  lat: number | string;
-  lng: number | string;
+  lat: number;
+  lng: number;
   address?: string;
 };
 
@@ -44,7 +43,7 @@ const CATEGORY_LABEL: Record<Category, string> = {
   newProperties: "New properties",
 };
 
-/** Distinct marker colours per category */
+/** Distinct colours per category (used for circle pins) */
 const CATEGORY_COLOR: Record<Category, string> = {
   lateFilings: "#0dd3d3",
   leaseExpiring: "#00c2a8",
@@ -55,24 +54,19 @@ const CATEGORY_COLOR: Record<Category, string> = {
   newProperties: "#5ad66f",
 };
 
-/** Vector pin path (24x24 viewBox) */
-const PIN_PATH =
-  "M12 2C7.6 2 4 5.6 4 10c0 5.6 8 12 8 12s8-6.4 8-12c0-4.4-3.6-8-8-8zm0 10.5a2.5 2.5 0 110-5 2.5 2.5 0 010 5z";
-
-/** Build a custom icon, fallback happens in render if google symbol fails */
+/** Safe, built-in symbol (fixes the SVG path error) */
 function iconFor(category: Category): google.maps.Symbol {
   return {
-    path: PIN_PATH as any,             // why: use our branded vector pin
+    path: google.maps.SymbolPath.CIRCLE,
     fillColor: CATEGORY_COLOR[category],
-    fillOpacity: 0.98,
+    fillOpacity: 0.95,
     strokeColor: "#ffffff",
-    strokeWeight: 1.25,
-    scale: 1.4,
-    anchor: new google.maps.Point(12, 22),
+    strokeWeight: 2,
+    scale: 8, // circle radius
   };
 }
 
-/** Layout (panel above map) */
+/** Layout tokens (panel above map) */
 const pageWrap: React.CSSProperties = { display: "flex", flexDirection: "column", gap: 12, padding: 16 };
 const panelStyle: React.CSSProperties = {
   background: "linear-gradient(180deg, rgba(7,20,24,0.98), rgba(7,20,24,0.92))",
@@ -113,12 +107,14 @@ const searchInput: React.CSSProperties = {
   outline: "none",
   boxShadow: "0 8px 24px rgba(0,0,0,0.18)",
 };
+const infoText: React.CSSProperties = { fontSize: 12, opacity: 0.8, color: "#cfffff", marginLeft: 4 };
 
 const mapContainer: React.CSSProperties = { width: "100%", height: "calc(100vh - 240px)" };
-const defaultCenter = { lat: 51.5074, lng: -0.1278 };
-const defaultZoom = 11;
 
-/** Safe readers (JSON / text / empty) */
+const defaultCenter = { lat: 51.5074, lng: -0.1278 };
+const defaultZoom = 10;
+
+/** Safe readers for mixed backends (JSON / text / empty) */
 async function readJsonSafe(res: Response): Promise<any | null> {
   const ct = res.headers.get("content-type") || "";
   const len = res.headers.get("content-length");
@@ -128,15 +124,11 @@ async function readJsonSafe(res: Response): Promise<any | null> {
   }
   try {
     const t = await res.text();
-    if (t && t.trim().startsWith("{")) { try { return JSON.parse(t); } catch { return { text: t }; } }
+    if (t && t.trim().startsWith("{")) {
+      try { return JSON.parse(t); } catch { return { text: t }; }
+    }
   } catch {}
   return null;
-}
-
-/** Number casting helper */
-function toNum(n: unknown): number {
-  const v = typeof n === "string" ? parseFloat(n) : (n as number);
-  return Number.isFinite(v) ? v : NaN;
 }
 
 export default function GoogleMapsView(): JSX.Element {
@@ -151,63 +143,61 @@ export default function GoogleMapsView(): JSX.Element {
 
   const [pins, setPins] = useState<Pin[]>([]);
   const [selectedCats, setSelectedCats] = useState<Set<Category>>(new Set(CATEGORIES));
+
   const [modalOpen, setModalOpen] = useState(false);
   const [pendingLatLng, setPendingLatLng] = useState<{ lat: number; lng: number } | null>(null);
   const [formTitle, setFormTitle] = useState("");
   const [formType, setFormType] = useState<Category>("retail");
   const [formAddress, setFormAddress] = useState("");
+
   const [shouldFitBounds, setShouldFitBounds] = useState<boolean>(true);
-  const [health, setHealth] = useState<string>("—");
+  const [health, setHealth] = useState<string>("checking…");
   const [getStatus, setGetStatus] = useState<string>("—");
 
+  /** Health ping to confirm API base URL is reachable */
   const fetchHealth = useCallback(async () => {
     try {
+      setHealth("checking…");
       const res = await fetch(`${API_BASE_URL}/api/health`, { mode: "cors" });
-      if (!res.ok) setHealth(`HTTP ${res.status}`);
+      if (!res.ok) setHealth(`down (HTTP ${res.status})`);
       else {
         const j = await readJsonSafe(res);
-        setHealth(j?.ok ? "ok" : "ok");
+        setHealth(j?.ok ? "ok" : "ok (no json)");
       }
-    } catch { setHealth("unreachable"); }
+    } catch {
+      setHealth("unreachable");
+    }
   }, []);
 
-  /** GET pins, cast lat/lng to numbers */
+  /** GET pins */
   const fetchPins = useCallback(async () => {
     try {
       setGetStatus("loading…");
       const res = await fetch(`${API_BASE_URL}/api/mapPins`, { mode: "cors" });
-      if (!res.ok) { setGetStatus(`HTTP ${res.status}`); setPins([]); return; }
+      if (!res.ok) {
+        setGetStatus(`HTTP ${res.status}`);
+        setPins([]);
+        return;
+      }
       const data = await readJsonSafe(res);
-
-      const rawList: any[] =
+      const list: Pin[] =
         (data && Array.isArray((data as any).pins) && (data as any).pins) ||
-        (Array.isArray(data) ? (data as any[]) : []);
-
-      const cleaned: Pin[] = rawList
-        .map((p) => {
-          const lat = toNum(p.lat);
-          const lng = toNum(p.lng);
-          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null; // why: bad coords won’t render
-          return {
-            id: p.id ?? `${lat},${lng}`,
-            title: p.title ?? "Untitled",
-            type: (p.type as Category) ?? "retail",
-            lat,
-            lng,
-            address: p.address ?? "",
-          } as Pin;
-        })
-        .filter(Boolean) as Pin[];
-
-      setPins(cleaned);
+        (Array.isArray(data) ? (data as Pin[]) : []);
+      setPins(Array.isArray(list) ? list : []);
       setShouldFitBounds(true);
       setGetStatus("ok");
-    } catch { setGetStatus("network error"); setPins([]); }
+    } catch {
+      setGetStatus("network error");
+      setPins([]);
+    }
   }, []);
 
-  useEffect(() => { fetchHealth(); fetchPins(); }, [fetchHealth, fetchPins]);
+  useEffect(() => {
+    fetchHealth().catch(() => void 0);
+    fetchPins().catch(() => void 0);
+  }, [fetchHealth, fetchPins]);
 
-  /** Fit to filtered pins */
+  /** Fit map to filtered pins when needed */
   useEffect(() => {
     if (!shouldFitBounds || !mapRef.current) return;
     const filtered = pins.filter((p) => selectedCats.has(p.type));
@@ -218,7 +208,7 @@ export default function GoogleMapsView(): JSX.Element {
       return;
     }
     const bounds = new google.maps.LatLngBounds();
-    filtered.forEach((p) => bounds.extend({ lat: toNum(p.lat), lng: toNum(p.lng) }));
+    filtered.forEach((p) => bounds.extend({ lat: p.lat, lng: p.lng }));
     setTimeout(() => {
       mapRef.current && mapRef.current.fitBounds(bounds, 60);
       setShouldFitBounds(false);
@@ -233,7 +223,7 @@ export default function GoogleMapsView(): JSX.Element {
     mapRef.current?.setZoom(14);
   }, []);
 
-  /** Reverse geocode (best-effort) */
+  /** Reverse geocode is best-effort (ignore failures) */
   const reverseGeocode = useCallback(async (lat: number, lng: number): Promise<string> => {
     try {
       if (!(window as any).google?.maps?.Geocoder) return "";
@@ -244,7 +234,9 @@ export default function GoogleMapsView(): JSX.Element {
           else resolve("");
         });
       });
-    } catch { return ""; }
+    } catch {
+      return "";
+    }
   }, []);
 
   const onMapClick = useCallback(async (e: google.maps.MapMouseEvent) => {
@@ -254,11 +246,11 @@ export default function GoogleMapsView(): JSX.Element {
     setPendingLatLng({ lat, lng });
     setFormTitle("");
     setFormType("retail");
-    reverseGeocode(lat, lng).then(setFormAddress).catch(() => setFormAddress(""));
+    reverseGeocode(lat, lng).then((addr) => setFormAddress(addr || "")).catch(() => setFormAddress(""));
     setModalOpen(true);
   }, [reverseGeocode]);
 
-  /** POST new pin */
+  /** POST new pin, then refetch and fit */
   const onSavePin = useCallback(async () => {
     if (!pendingLatLng) return;
     if (!formTitle.trim()) { alert("Title is required."); return; }
@@ -269,6 +261,7 @@ export default function GoogleMapsView(): JSX.Element {
       lat: pendingLatLng.lat,
       lng: pendingLatLng.lng,
     };
+
     try {
       const res = await fetch(`${API_BASE_URL}/api/mapPins`, {
         method: "POST",
@@ -276,11 +269,14 @@ export default function GoogleMapsView(): JSX.Element {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+
       if (!res.ok) {
         const payload = await readJsonSafe(res);
-        alert(`Save failed: HTTP ${res.status}${payload ? ` — ${JSON.stringify(payload)}` : ""}`);
+        const msg = typeof payload === "string" ? payload : payload?.message || payload?.error || JSON.stringify(payload);
+        alert(`Save failed: HTTP ${res.status}${msg ? ` — ${msg}` : ""}`);
         return;
       }
+
       await readJsonSafe(res).catch(() => null);
       setModalOpen(false);
       setPendingLatLng(null);
@@ -288,10 +284,38 @@ export default function GoogleMapsView(): JSX.Element {
       setShouldFitBounds(true);
     } catch (err: any) {
       alert(`Network error saving pin.${err?.message ? ` ${err.message}` : ""}`);
+      console.error("POST /api/mapPins network error", err);
     }
   }, [pendingLatLng, formTitle, formType, formAddress, fetchPins]);
 
-  /** Demo set (7 pins) */
+  /** Seed ONE demo pin (Retail @ Trafalgar Sq) */
+  const seedDemoPin = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/mapPins`, {
+        method: "POST",
+        mode: "cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: "Demo retail pin",
+          type: "retail",
+          address: "Trafalgar Square, London",
+          lat: 51.5080,
+          lng: -0.1281,
+        }),
+      });
+      if (!res.ok) {
+        const payload = await readJsonSafe(res);
+        alert(`Seed failed: HTTP ${res.status} ${payload ? JSON.stringify(payload) : ""}`);
+        return;
+      }
+      await fetchPins();
+      setShouldFitBounds(true);
+    } catch (e: any) {
+      alert(`Seed failed: ${e?.message || "network error"}`);
+    }
+  }, [fetchPins]);
+
+  /** Seed a SET of 7 pins (one per category) around central London */
   const seedDemoSet = useCallback(async () => {
     const demo: Pin[] = [
       { title: "Late filings demo", type: "lateFilings", lat: 51.5107, lng: -0.1167, address: "Strand" },
@@ -335,10 +359,7 @@ export default function GoogleMapsView(): JSX.Element {
   const showAll = useCallback(() => { setSelectedCats(new Set(CATEGORIES)); setShouldFitBounds(true); }, []);
   const hideAll = useCallback(() => { setSelectedCats(new Set()); setShouldFitBounds(true); }, []);
 
-  const filteredPins = useMemo(
-    () => pins.filter((p) => selectedCats.has(p.type)),
-    [pins, selectedCats]
-  );
+  const filteredPins = useMemo(() => pins.filter((p) => selectedCats.has(p.type)), [pins, selectedCats]);
 
   if (loadError) return <div style={{ padding: 24 }}>Failed to load Google Maps.</div>;
   if (!isLoaded) return <div style={{ padding: 24 }}>Loading map…</div>;
@@ -350,7 +371,7 @@ export default function GoogleMapsView(): JSX.Element {
         <h2 style={titleStyle}>Google Maps Engine</h2>
 
         <div style={{ ...row, marginTop: 10, alignItems: "center" }}>
-          <button type="button" className="teal-glow" style={actionBtn} onClick={() => alert("Click anywhere on the map to place a pin.")}>
+          <button type="button" className="teal-glow" style={actionBtn} onClick={() => alert("Tip: Click anywhere on the map to place a pin.")}>
             Click map to place…
           </button>
           <button type="button" className="teal-glow" style={actionBtn} onClick={() => { fetchPins(); setShouldFitBounds(true); }}>
@@ -362,27 +383,23 @@ export default function GoogleMapsView(): JSX.Element {
           <button type="button" className="teal-glow" style={actionBtn} onClick={hideAll}>
             Hide all
           </button>
+
+          <span style={infoText}>Filtered {filteredPins.length} / {pins.length} pins</span>
+          <span style={{ ...infoText, marginLeft: 12 }}>API: {health} • GET: {getStatus} • Base: {API_BASE_URL}</span>
+
+          <button type="button" className="teal-glow" style={actionBtn} onClick={seedDemoPin}>
+            Seed demo pin
+          </button>
           <button type="button" className="teal-glow" style={actionBtn} onClick={seedDemoSet}>
             Seed demo set
           </button>
-
-          <span style={{ marginLeft: 8, fontSize: 12, opacity: 0.7, color: "#cfffff" }}>
-            Filtered {filteredPins.length} / {pins.length} pins • API: {health} • GET: {getStatus} • Base: {API_BASE_URL}
-          </span>
         </div>
 
         <div style={{ ...row, marginTop: 12 }}>
           {CATEGORIES.map((cat) => {
             const active = selectedCats.has(cat);
             return (
-              <button
-                key={cat}
-                type="button"
-                className="teal-glow"
-                onClick={() => toggleCategory(cat)}
-                style={chip(active)}
-                aria-pressed={active}
-              >
+              <button key={cat} type="button" className="teal-glow" onClick={() => toggleCategory(cat)} style={chip(active)} aria-pressed={active}>
                 {CATEGORY_LABEL[cat]}
               </button>
             );
@@ -408,30 +425,17 @@ export default function GoogleMapsView(): JSX.Element {
           mapTypeControl: false,
           fullscreenControl: false,
           clickableIcons: false,
-          gestureHandling: "greedy", // no Ctrl+scroll requirement
+          gestureHandling: "greedy", // allow scroll-zoom without Ctrl
         }}
       >
-        {filteredPins.map((pin, idx) => {
-          const lat = toNum(pin.lat);
-          const lng = toNum(pin.lng);
-          if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-
-          // Safeguard: if for any reason the symbol fails, let Google use default pin.
-          let icon: google.maps.Symbol | undefined;
-          try { icon = iconFor(pin.type); } catch { icon = undefined; }
-
-          return (
-            <Marker
-              key={pin.id ?? `${lat},${lng},${idx}`}
-              position={{ lat, lng }}
-              title={`${pin.title}${pin.address ? " — " + pin.address : ""}`}
-              icon={icon}
-              zIndex={9999}
-              /** why: turn off canvas optimization so the SVG stays crisp above tiles in some themes */
-              optimized={false}
-            />
-          );
-        })}
+        {filteredPins.map((pin, idx) => (
+          <Marker
+            key={pin.id ?? `${pin.lat},${pin.lng},${idx}`}
+            position={{ lat: pin.lat, lng: pin.lng }}
+            title={`${pin.title}${pin.address ? " — " + pin.address : ""}`}
+            icon={iconFor(pin.type)}
+          />
+        ))}
       </GoogleMap>
 
       {/* Modal */}
@@ -462,7 +466,9 @@ export default function GoogleMapsView(): JSX.Element {
               boxShadow: "0 20px 60px rgba(0,0,0,0.35)",
             }}
           >
-            <h3 style={{ margin: "6px 0 14px", color: "#cfffff", fontSize: 18, fontWeight: 800 }}>Add Map Pin</h3>
+            <h3 style={{ margin: "6px 0 14px", color: "#cfffff", fontSize: 18, fontWeight: 800 }}>
+              Add Map Pin
+            </h3>
 
             <label style={{ display: "block", fontSize: 12, letterSpacing: 0.4, marginBottom: 6, color: "rgba(255,255,255,0.7)", textTransform: "uppercase" }}>
               Title *
