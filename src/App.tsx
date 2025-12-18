@@ -1,25 +1,16 @@
-// src/App.tsx
 import React, { Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route, Navigate, Link } from "react-router-dom";
 
-// Lazy-load views using the vite alias you already set in vite.config.ts
 const DashboardView = lazy(() => import("@views/DashboardView"));
 const DealFlowView = lazy(() => import("@views/DealFlowView"));
 const GoogleMapsView = lazy(() => import("@views/GoogleMapsView"));
 const OperatorMatchingView = lazy(() => import("@views/OperatorMatchingView"));
 
-// Simple loading state while chunks load
 function Loading() {
-  return (
-    <div style={{ padding: 24 }}>Loading…</div>
-  );
+  return <div style={{ padding: 24 }}>Loading…</div>;
 }
 
-// Hard error boundary so a crashing page doesn't blank the app
-class ErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { error: any }
-> {
+class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { error: any }> {
   constructor(props: { children: React.ReactNode }) {
     super(props);
     this.state = { error: null };
@@ -28,7 +19,6 @@ class ErrorBoundary extends React.Component<
     return { error };
   }
   componentDidCatch(error: any, info: any) {
-    // eslint-disable-next-line no-console
     console.error("ErrorBoundary caught:", error, info);
   }
   render() {
