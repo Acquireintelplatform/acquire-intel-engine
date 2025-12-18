@@ -1,4 +1,6 @@
-// src/layout/Sidebar.tsx
+// src/layout/sidebar.tsx  (lowercase)
+// This replaces any old sidebar that still had "(placeholder)" labels.
+
 import { NavLink } from "react-router-dom";
 import React from "react";
 
@@ -32,6 +34,9 @@ const MENU: Item[] = [
 ];
 
 export default function Sidebar() {
+  // sanity marker so we know THIS file is live in the browser console
+  console.log("** USING sidebar.tsx (lowercase) **");
+
   return (
     <aside
       style={{
@@ -41,15 +46,14 @@ export default function Sidebar() {
         padding: 16,
         overflowY: "auto",
       }}
+      data-testid="sidebar-live"
     >
       <div style={{ fontWeight: 800, fontSize: 22, color: "#aefcff", marginBottom: 16 }}>
         Acquire Intel
       </div>
 
       {MENU.map((item, idx) => {
-        const showSection =
-          idx === 0 || item.section !== MENU[idx - 1]?.section;
-
+        const showSection = idx === 0 || item.section !== MENU[idx - 1]?.section;
         return (
           <React.Fragment key={`${item.section || "x"}-${item.label}`}>
             {showSection && item.section && (
