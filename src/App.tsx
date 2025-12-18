@@ -1,8 +1,8 @@
 // src/App.tsx
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
-// Use your Vite aliases (vite.config.ts) so the paths always resolve on Render
-import Sidebar from "@layout/Sidebar";
+// IMPORTANT: match the actual filename case on disk (sidebar.tsx)
+import Sidebar from "@layout/sidebar";
 import DashboardView from "@views/DashboardView";
 import DealFlowView from "@views/DealFlowView";
 import GoogleMapsView from "@views/GoogleMapsView";
