@@ -1,70 +1,106 @@
-// src/layout/Sidebar.tsx
+// src/layout/SideNav.tsx
 import { NavLink } from "react-router-dom";
-import "./sidebar.css";
 
-function Item({ to, children }: { to: string; children: React.ReactNode }) {
+function Item({
+  to,
+  label,
+}: {
+  to: string;
+  label: string;
+}) {
   return (
     <NavLink
       to={to}
-      className={({ isActive }) => "ai-link" + (isActive ? " is-active" : "")}
+      className={({ isActive }) =>
+        [
+          "block w-full rounded-xl px-4 py-4 transition",
+          "border border-teal-900/30 bg-slate-900/40",
+          isActive
+            ? "ring-1 ring-teal-400/60 text-teal-200"
+            : "hover:bg-slate-900/70 text-slate-200",
+        ].join(" ")
+      }
     >
-      {children}
+      {label}
     </NavLink>
   );
 }
 
-function Group({ title, children }: { title: string; children: React.ReactNode }) {
+export default function SideNav() {
   return (
-    <div className="ai-group">
-      <div className="ai-group-title">{title}</div>
-      <div className="ai-group-items">{children}</div>
-    </div>
-  );
-}
+    <aside className="h-full w-[300px] shrink-0 overflow-y-auto border-r border-slate-800 bg-slate-950/60 p-4">
+      <div className="mb-6 text-2xl font-bold tracking-wide text-teal-300">
+        Acquire Intel
+      </div>
 
-export default function Sidebar() {
-  return (
-    <div className="ai-sb">
-      <div className="ai-brand">ACQUIRE INTEL</div>
+      <section className="mb-6">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Dashboard
+        </div>
+        <div className="space-y-3">
+          <Item to="/dashboard" label="Dashboard" />
+        </div>
+      </section>
 
-      <nav className="ai-nav">
-        <Group title="DASHBOARD">
-          <Item to="/dashboard">Dashboard</Item>
-        </Group>
+      <section className="mb-6">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          AI Intelligence
+        </div>
+        <div className="space-y-3">
+          <Item to="/live-alerts" label="Live Alerts" />
+          <Item to="/industry-news" label="Industry News" />
+        </div>
+      </section>
 
-        <Group title="AI INTELLIGENCE">
-          <Item to="/live-alerts">Live Alerts</Item>
-          <Item to="/industry-news">Industry News</Item>
-        </Group>
+      <section className="mb-6">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Deal Flow
+        </div>
+        <div className="space-y-3">
+          <Item to="/deal-flow" label="Deal Flow" />
+        </div>
+      </section>
 
-        <Group title="DEAL FLOW">
-          <Item to="/deal-flow">Deal Flow</Item>
-        </Group>
+      <section className="mb-6">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Distress & Risk
+        </div>
+        <div className="space-y-3">
+          <Item to="/distress-signals" label="Distress Signals" />
+        </div>
+      </section>
 
-        <Group title="DISTRESS & RISK">
-          <Item to="/distress-signals">Distress Signals</Item>
-        </Group>
+      <section className="mb-6">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Acquisition Pipeline
+        </div>
+        <div className="space-y-3">
+          <Item to="/property-search" label="Property Search" />
+          <Item to="/property-feeds" label="Property Feeds" />
+          <Item to="/google-maps-engine" label="Google Maps Engine" />
+        </div>
+      </section>
 
-        <Group title="ACQUISITION PIPELINE">
-          <Item to="/property-search">Property Search</Item>
-          <Item to="/property-feeds">Property Feeds</Item>
-          <Item to="/map-insights">Map Insights</Item>
-          <Item to="/google-maps-engine">Google Maps Engine</Item>
-        </Group>
+      <section className="mb-6">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Operators
+        </div>
+        <div className="space-y-3">
+          <Item to="/operator-matching" label="Operator Matching" />
+          <Item to="/operator-requirements" label="Requirements" />
+        </div>
+      </section>
 
-        <Group title="OPERATORS">
-          <Item to="/operator-matching">Operator Matching</Item>
-          <Item to="/requirements">Requirements</Item>
-        </Group>
-
-        <Group title="ADMIN">
-          <Item to="/agents">Agents & Landlords</Item>
-          <Item to="/scraper-status">Scraper Status</Item>
-          <Item to="/health">System Health</Item>
-        </Group>
-      </nav>
-
-      <div className="ai-sys">● System Online</div>
-    </div>
+      <section className="mb-2">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
+          Admin
+        </div>
+        <div className="space-y-3">
+          <Item to="/settings" label="Settings" />
+          <Item to="/system-health" label="System Health" />
+          <Item to="/scraper-status" label="Scraper Status" />
+        </div>
+      </section>
+    </aside>
   );
 }
