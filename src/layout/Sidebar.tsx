@@ -1,71 +1,90 @@
 // src/layout/Sidebar.tsx
 import { NavLink } from "react-router-dom";
+import React from "react";
 
-const item =
-  "block w-full text-left rounded-xl px-4 py-3 mb-3 bg-[#0e2326] hover:bg-[#123136] border border-[#18454b] transition";
-const active =
-  "ring-2 ring-[#3de0b8]";
+type Item = { label: string; to: string; section?: string };
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="mb-6">
-      <div className="uppercase text-xs tracking-wider text-[#7dddc8] mb-2">
-        {title}
-      </div>
-      {children}
-    </div>
-  );
-}
+const MENU: Item[] = [
+  // DASHBOARD
+  { section: "DASHBOARD", label: "Dashboard", to: "/dashboard" },
 
-function Nav({ to, label }: { to: string; label: string }) {
-  return (
-    <NavLink
-      to={to}
-      className={({ isActive }) => `${item} ${isActive ? active : ""}`}
-    >
-      {label}
-    </NavLink>
-  );
-}
+  // AI INTELLIGENCE
+  { section: "AI INTELLIGENCE", label: "Live Alerts", to: "/live-alerts" },
+  { label: "Industry News", to: "/industry-news" },
+
+  // DEAL FLOW
+  { section: "DEAL FLOW", label: "Deal Flow", to: "/deal-flow" },
+
+  // DISTRESS & RISK
+  { section: "DISTRESS & RISK", label: "Distress Signals", to: "/distress-signals" },
+
+  // ACQUISITION PIPELINE
+  { section: "ACQUISITION PIPELINE", label: "Property Search", to: "/property-search" },
+  { label: "Property Feeds", to: "/property-feeds" },
+  { label: "Google Maps Engine", to: "/google-maps-engine" },
+
+  // OPERATORS
+  { section: "OPERATORS", label: "Operator Matching", to: "/operator-matching" },
+  { label: "Requirements", to: "/requirements" },
+
+  // ADMIN
+  { section: "ADMIN", label: "Settings", to: "/settings" },
+];
 
 export default function Sidebar() {
   return (
-    <aside className="w-full md:w-72 p-4 text-[#ccf8ee]">
-      <h1 className="text-2xl font-bold mb-6">Acquire Intel</h1>
+    <aside
+      style={{
+        width: 260,
+        background: "rgba(4, 24, 32, 0.9)",
+        borderRight: "1px solid rgba(255,255,255,0.08)",
+        padding: 16,
+        overflowY: "auto",
+      }}
+    >
+      <div style={{ fontWeight: 800, fontSize: 22, color: "#aefcff", marginBottom: 16 }}>
+        Acquire Intel
+      </div>
 
-      <Section title="Dashboard">
-        <Nav to="/dashboard" label="Dashboard" />
-      </Section>
+      {MENU.map((item, idx) => {
+        const showSection =
+          idx === 0 || item.section !== MENU[idx - 1]?.section;
 
-      <Section title="AI Intelligence">
-        <Nav to="/live-alerts" label="Live Alerts" />
-        <Nav to="/industry-news" label="Industry News" />
-      </Section>
+        return (
+          <React.Fragment key={`${item.section || "x"}-${item.label}`}>
+            {showSection && item.section && (
+              <div
+                style={{
+                  fontSize: 12,
+                  letterSpacing: 1,
+                  color: "#80b7c4",
+                  marginTop: idx === 0 ? 0 : 18,
+                  marginBottom: 8,
+                }}
+              >
+                {item.section}
+              </div>
+            )}
 
-      <Section title="Deal Flow">
-        <Nav to="/deal-flow" label="Deal Flow" />
-      </Section>
-
-      <Section title="Distress & Risk">
-        <Nav to="/distress-signals" label="Distress Signals" />
-      </Section>
-
-      <Section title="Acquisition Pipeline">
-        <Nav to="/property-search" label="Property Search" />
-        <Nav to="/property-feeds" label="Property Feeds" />
-        <Nav to="/google-maps-engine" label="Google Maps Engine" />
-      </Section>
-
-      <Section title="Operators">
-        <Nav to="/operator-matching" label="Operator Matching" />
-        <Nav to="/operator-requirements" label="Requirements" />
-      </Section>
+            <NavLink
+              to={item.to}
+              style={({ isActive }) => ({
+                display: "block",
+                padding: "12px 14px",
+                borderRadius: 12,
+                marginBottom: 10,
+                color: "#cde7ee",
+                textDecoration: "none",
+                border: "1px solid rgba(255,255,255,0.10)",
+                background: isActive ? "rgba(0, 255, 200, 0.10)" : "transparent",
+                boxShadow: isActive ? "0 0 10px rgba(0,255,200,0.12) inset" : "none",
+              })}
+            >
+              {item.label}
+            </NavLink>
+          </React.Fragment>
+        );
+      })}
     </aside>
   );
 }
