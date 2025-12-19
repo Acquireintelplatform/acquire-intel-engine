@@ -1,94 +1,109 @@
-// src/layout/sidebar.tsx  (lowercase)
-// This replaces any old sidebar that still had "(placeholder)" labels.
-
-import { NavLink } from "react-router-dom";
+// src/layout/sidebar.tsx
+//-------------------------------------------------------------
+// Acquire Intel — Sidebar Navigation
+//-------------------------------------------------------------
 import React from "react";
 
-type Item = { label: string; to: string; section?: string };
+const Sidebar: React.FC = () => {
+  const linkStyle: React.CSSProperties = {
+    display: "block",
+    padding: "10px 14px",
+    marginBottom: "4px",
+    color: "#aefeff",
+    textDecoration: "none",
+    borderRadius: "6px",
+    transition: "background 0.2s",
+  };
 
-const MENU: Item[] = [
-  // DASHBOARD
-  { section: "DASHBOARD", label: "Dashboard", to: "/dashboard" },
+  const sectionTitle: React.CSSProperties = {
+    color: "#1fe6b0",
+    fontSize: "0.8rem",
+    margin: "16px 0 6px 12px",
+    letterSpacing: "0.05em",
+  };
 
-  // AI INTELLIGENCE
-  { section: "AI INTELLIGENCE", label: "Live Alerts", to: "/live-alerts" },
-  { label: "Industry News", to: "/industry-news" },
-
-  // DEAL FLOW
-  { section: "DEAL FLOW", label: "Deal Flow", to: "/deal-flow" },
-
-  // DISTRESS & RISK
-  { section: "DISTRESS & RISK", label: "Distress Signals", to: "/distress-signals" },
-
-  // ACQUISITION PIPELINE
-  { section: "ACQUISITION PIPELINE", label: "Property Search", to: "/property-search" },
-  { label: "Property Feeds", to: "/property-feeds" },
-  { label: "Google Maps Engine", to: "/google-maps-engine" },
-
-  // OPERATORS
-  { section: "OPERATORS", label: "Operator Matching", to: "/operator-matching" },
-  { label: "Requirements", to: "/requirements" },
-
-  // ADMIN
-  { section: "ADMIN", label: "Settings", to: "/settings" },
-];
-
-export default function Sidebar() {
-  // sanity marker so we know THIS file is live in the browser console
-  console.log("** USING sidebar.tsx (lowercase) **");
+  const sidebarStyle: React.CSSProperties = {
+    width: "240px",
+    background: "#011820",
+    padding: "1rem 0",
+    overflowY: "auto",
+  };
 
   return (
-    <aside
-      style={{
-        width: 260,
-        background: "rgba(4, 24, 32, 0.9)",
-        borderRight: "1px solid rgba(255,255,255,0.08)",
-        padding: 16,
-        overflowY: "auto",
-      }}
-      data-testid="sidebar-live"
-    >
-      <div style={{ fontWeight: 800, fontSize: 22, color: "#aefcff", marginBottom: 16 }}>
+    <aside style={sidebarStyle}>
+      <div style={{ paddingLeft: "1rem", fontWeight: "bold", color: "#aefeff", fontSize: "1.2rem" }}>
         Acquire Intel
       </div>
 
-      {MENU.map((item, idx) => {
-        const showSection = idx === 0 || item.section !== MENU[idx - 1]?.section;
-        return (
-          <React.Fragment key={`${item.section || "x"}-${item.label}`}>
-            {showSection && item.section && (
-              <div
-                style={{
-                  fontSize: 12,
-                  letterSpacing: 1,
-                  color: "#80b7c4",
-                  marginTop: idx === 0 ? 0 : 18,
-                  marginBottom: 8,
-                }}
-              >
-                {item.section}
-              </div>
-            )}
+      {/* Dashboard */}
+      <div>
+        <div style={sectionTitle}>DASHBOARD</div>
+        <a href="/dashboard" style={linkStyle}>
+          Dashboard
+        </a>
+      </div>
 
-            <NavLink
-              to={item.to}
-              style={({ isActive }) => ({
-                display: "block",
-                padding: "12px 14px",
-                borderRadius: 12,
-                marginBottom: 10,
-                color: "#cde7ee",
-                textDecoration: "none",
-                border: "1px solid rgba(255,255,255,0.10)",
-                background: isActive ? "rgba(0, 255, 200, 0.10)" : "transparent",
-                boxShadow: isActive ? "0 0 10px rgba(0,255,200,0.12) inset" : "none",
-              })}
-            >
-              {item.label}
-            </NavLink>
-          </React.Fragment>
-        );
-      })}
+      {/* AI INTELLIGENCE */}
+      <div>
+        <div style={sectionTitle}>AI INTELLIGENCE</div>
+        <a href="/live-alerts" style={linkStyle}>
+          Live Alerts
+        </a>
+        <a href="/industry-news" style={linkStyle}>
+          Industry News
+        </a>
+      </div>
+
+      {/* DEAL FLOW */}
+      <div>
+        <div style={sectionTitle}>DEAL FLOW</div>
+        <a href="/deal-flow" style={linkStyle}>
+          Deal Flow
+        </a>
+      </div>
+
+      {/* DISTRESS & RISK */}
+      <div>
+        <div style={sectionTitle}>DISTRESS & RISK</div>
+        <a href="/distress-signals" style={linkStyle}>
+          Distress Signals
+        </a>
+      </div>
+
+      {/* ACQUISITION PIPELINE */}
+      <div>
+        <div style={sectionTitle}>ACQUISITION PIPELINE</div>
+        <a href="/property-search" style={linkStyle}>
+          Property Search
+        </a>
+        <a href="/property-feeds" style={linkStyle}>
+          Property Feeds
+        </a>
+        <a href="/google-maps-engine" style={linkStyle}>
+          Google Maps Engine
+        </a>
+      </div>
+
+      {/* OPERATORS */}
+      <div>
+        <div style={sectionTitle}>OPERATORS</div>
+        <a href="/operator-matching" style={linkStyle}>
+          Operator Matching
+        </a>
+        <a href="/operator-requirements" style={linkStyle}>
+          Requirements
+        </a>
+      </div>
+
+      {/* ADMIN */}
+      <div>
+        <div style={sectionTitle}>ADMIN</div>
+        <a href="/settings" style={linkStyle}>
+          Settings
+        </a>
+      </div>
     </aside>
   );
-}
+};
+
+export default Sidebar;
