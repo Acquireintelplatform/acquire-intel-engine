@@ -1,44 +1,47 @@
-/* === Acquire Intel Engine — index.css (Step 8) === */
-/* Reset */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* src/styles/index.css */
+/* Basic dark theme global styles for Acquire Intel Engine */
 
-/* Root sizing */
-html, body, #root { height: 100%; width: 100%; }
-
-/* Page scroll only */
-html, body {
-  overflow-y: auto !important;   /* one vertical scrollbar on the page */
-  overflow-x: hidden !important; /* no horizontal scrollbar */
-  background: #031321;
-  color: #d9e5e8;
-  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+body {
+  margin: 0;
+  font-family: 'Inter', sans-serif;
+  background-color: #000f14;
+  color: #e8ffff;
 }
 
-/* DARK THIN SCROLLBAR — Chromium/WebKit */
-html::-webkit-scrollbar,
-body::-webkit-scrollbar {
-  width: 10px;
-}
-html::-webkit-scrollbar-track,
-body::-webkit-scrollbar-track {
-  background: #031321;
-}
-html::-webkit-scrollbar-thumb,
-body::-webkit-scrollbar-thumb {
-  background: rgba(46, 242, 208, 0.35);
-  border-radius: 10px;
-  border: 2px solid #031321;
-}
-html::-webkit-scrollbar-thumb:hover,
-body::-webkit-scrollbar-thumb:hover {
-  background: rgba(46, 242, 208, 0.5);
+a {
+  color: #1fe6b0;
+  text-decoration: none;
 }
 
-/* DARK THIN SCROLLBAR — Firefox */
-html, body {
-  scrollbar-color: rgba(46, 242, 208, 0.35) #031321;
-  scrollbar-width: thin;
+a:hover {
+  color: #9affff;
 }
 
-/* Prevent component-level horizontal scrollbars */
-.page-wrapper, .page-content { overflow-x: hidden !important; }
+button {
+  background: #093a43;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+button:hover {
+  background: #11715a;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th {
+  background-color: #072b33;
+  color: #1fe6b0;
+}
+
+td, th {
+  border: 1px solid #0f3b45;
+  padding: 8px;
+}
