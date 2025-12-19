@@ -10,24 +10,31 @@ import DealFlowView from "@views/DealFlowView";
 import GoogleMapsView from "@views/GoogleMapsView";
 import OperatorMatchingView from "@views/OperatorMatchingView";
 import OperatorRequirementsView from "@views/OperatorRequirementsView";
-import "./styles/index.css";
+import "./index.css"; // ✅ FIXED path
 
 const App: React.FC = () => {
   return (
     <Router>
-      <div style={{ display: "flex", height: "100vh" }}>
+      <div style={{ display: "flex", height: "100vh", background: "#001018" }}>
         <Sidebar />
-        <div style={{ flex: 1, overflowY: "auto" }}>
+        <main style={{ flex: 1, overflowY: "auto", padding: "1rem" }}>
           <Routes>
+            {/* Default redirect */}
             <Route path="/" element={<Navigate to="/dashboard" />} />
+
+            {/* Core routes */}
             <Route path="/dashboard" element={<DashboardView />} />
             <Route path="/deal-flow" element={<DealFlowView />} />
             <Route path="/google-maps-engine" element={<GoogleMapsView />} />
+
+            {/* Operators */}
             <Route path="/operator-matching" element={<OperatorMatchingView />} />
             <Route path="/operator-requirements" element={<OperatorRequirementsView />} />
-            <Route path="*" element={<div style={{ padding: 40 }}>404 — Page not found</div>} />
+
+            {/* Fallback */}
+            <Route path="*" element={<div style={{ padding: "2rem" }}>404 — Page not found</div>} />
           </Routes>
-        </div>
+        </main>
       </div>
     </Router>
   );
