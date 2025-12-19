@@ -1,7 +1,23 @@
+// src/views/RequirementsView.tsx
+//-------------------------------------------------------------
+// Clean, simple Requirements Manager
+//-------------------------------------------------------------
 import React, { useState, useEffect } from "react";
 
-export default function Requirements() {
-  const [requirements, setRequirements] = useState([]);
+interface Requirement {
+  id: number;
+  name: string;
+  sector: string;
+  preferred_locations: string[];
+  size_sqm: string;
+  notes: string;
+}
+
+const API_URL = "https://acquire-intel-api.onrender.com/api/operatorRequirements";
+
+export default function RequirementsView() {
+  const [requirements, setRequirements] = useState<Requirement[]>([]);
+  const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({
     name: "",
     sector: "",
@@ -9,139 +25,124 @@ export default function Requirements() {
     size_sqm: "",
     notes: "",
   });
-  const [showModal, setShowModal] = useState(false);
+  const [showForm, setShowForm] = useState(false);
 
-  const API_URL = "https://acquire-intel-api.onrender.com/api/operatorRequirements";
-
-  // Fetch requirements
-  const loadRequirements = async () => {
-    const res = await fetch(API_URL);
-    const data = await res.json();
-    if (data.ok) setRequirements(data.items);
-  };
-
+  // Load requirements from API
   useEffect(() => {
-    loadRequirements();
+    fetch(API_URL)
+      .then(res => res.json())
+      .then(data => {
+        if (data.ok) setRequirements(data.items);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error("Error loading requirements:", err);
+        setLoading(false);
+      });
   }, []);
 
-  // Handle form change
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm({ ...form, [name]: value });
-  };
+  // Add new requirement
+  const handleAdd = async () => {
+    try {
+      const body = {
+        ...form,
+        preferred_locations: form.preferred_locations
+          ? form.preferred_locations.split(",").map(x => x.trim())
+          : [],
+      };
 
-  // Submit new requirement
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const payload = {
-      name: form.name,
-      sector: form.sector,
-      preferred_locations: form.preferred_locations.split(",").map((l) => l.trim()),
-      size_sqm: form.size_sqm,
-      notes: form.notes,
-    };
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
 
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    const data = await res.json();
-    if (data.ok) {
-      setShowModal(false);
-      setForm({ name: "", sector: "", preferred_locations: "", size_sqm: "", notes: "" });
-      loadRequirements();
-    } else {
-      alert("Error: " + data.error);
+      const data = await res.json();
+      if (data.ok) {
+        setRequirements([data.item, ...requirements]);
+        setForm({ name: "", sector: "", preferred_locations: "", size_sqm: "", notes: "" });
+        setShowForm(false);
+      } else {
+        alert("Failed: " + data.error);
+      }
+    } catch (err) {
+      console.error("Error saving requirement:", err);
+      alert("Error saving requirement.");
     }
   };
+
+  if (loading) return <p className="p-4 text-gray-400">Loading requirements...</p>;
 
   return (
     <div className="p-6 text-white">
       <h2 className="text-2xl font-bold mb-4">Operator Requirements</h2>
 
       <button
-        onClick={() => setShowModal(true)}
-        className="bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded-lg mb-4"
+        onClick={() => setShowForm(!showForm)}
+        className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg mb-4"
       >
-        ➕ Add Requirement
+        {showForm ? "Cancel" : "Add Requirement"}
       </button>
 
-      <ul className="space-y-2">
-        {requirements.map((r) => (
-          <li key={r.id} className="border border-gray-700 rounded-lg p-3">
-            <p><strong>{r.name}</strong> ({r.sector})</p>
-            <p>📍 {r.preferredlocations?.join(", ") || "N/A"}</p>
-            <p>📏 Size: {r.size_sqm || "N/A"}</p>
-            <p>📝 {r.notes || "No notes"}</p>
+      {showForm && (
+        <div className="bg-gray-900 p-4 rounded-xl mb-6">
+          <input
+            type="text"
+            placeholder="Name"
+            value={form.name}
+            onChange={e => setForm({ ...form, name: e.target.value })}
+            className="block w-full mb-2 p-2 bg-gray-800 border border-gray-700 rounded"
+          />
+          <input
+            type="text"
+            placeholder="Sector"
+            value={form.sector}
+            onChange={e => setForm({ ...form, sector: e.target.value })}
+            className="block w-full mb-2 p-2 bg-gray-800 border border-gray-700 rounded"
+          />
+          <input
+            type="text"
+            placeholder="Preferred Locations (comma-separated)"
+            value={form.preferred_locations}
+            onChange={e => setForm({ ...form, preferred_locations: e.target.value })}
+            className="block w-full mb-2 p-2 bg-gray-800 border border-gray-700 rounded"
+          />
+          <input
+            type="text"
+            placeholder="Size (sqm)"
+            value={form.size_sqm}
+            onChange={e => setForm({ ...form, size_sqm: e.target.value })}
+            className="block w-full mb-2 p-2 bg-gray-800 border border-gray-700 rounded"
+          />
+          <textarea
+            placeholder="Notes"
+            value={form.notes}
+            onChange={e => setForm({ ...form, notes: e.target.value })}
+            className="block w-full mb-3 p-2 bg-gray-800 border border-gray-700 rounded"
+          />
+          <button
+            onClick={handleAdd}
+            className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg"
+          >
+            Save Requirement
+          </button>
+        </div>
+      )}
+
+      <ul>
+        {requirements.map(req => (
+          <li
+            key={req.id}
+            className="bg-gray-900 p-4 rounded-xl mb-2 border border-gray-700"
+          >
+            <h3 className="font-semibold text-lg">{req.name}</h3>
+            <p>Sector: {req.sector || "—"}</p>
+            <p>Preferred: {req.preferred_locations?.join(", ") || "—"}</p>
+            <p>Size: {req.size_sqm || "—"} sqm</p>
+            <p className="text-sm text-gray-400">{req.notes || ""}</p>
           </li>
         ))}
       </ul>
-
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center">
-          <form
-            onSubmit={handleSubmit}
-            className="bg-gray-900 p-6 rounded-xl shadow-xl w-96 space-y-4"
-          >
-            <h3 className="text-xl font-semibold mb-2">Add Requirement</h3>
-
-            <input
-              name="name"
-              value={form.name}
-              onChange={handleChange}
-              placeholder="Name"
-              className="w-full p-2 rounded bg-gray-800"
-              required
-            />
-            <input
-              name="sector"
-              value={form.sector}
-              onChange={handleChange}
-              placeholder="Sector"
-              className="w-full p-2 rounded bg-gray-800"
-              required
-            />
-            <input
-              name="preferred_locations"
-              value={form.preferred_locations}
-              onChange={handleChange}
-              placeholder="Preferred Locations (comma separated)"
-              className="w-full p-2 rounded bg-gray-800"
-            />
-            <input
-              name="size_sqm"
-              value={form.size_sqm}
-              onChange={handleChange}
-              placeholder="Size (sqm)"
-              className="w-full p-2 rounded bg-gray-800"
-            />
-            <textarea
-              name="notes"
-              value={form.notes}
-              onChange={handleChange}
-              placeholder="Notes"
-              className="w-full p-2 rounded bg-gray-800"
-            />
-            <div className="flex justify-between">
-              <button
-                type="submit"
-                className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg"
-              >
-                Add Requirement
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowModal(false)}
-                className="bg-gray-700 px-4 py-2 rounded-lg"
-              >
-                Cancel
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
     </div>
   );
 }
