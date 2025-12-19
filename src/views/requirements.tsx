@@ -1,117 +1,147 @@
-import { useEffect, useMemo, useState } from "react";
-
-type Requirement = {
-  id: number;
-  operator_name: string;
-  min_size_sqft: number | null;
-  max_size_sqft: number | null;
-  preferred_locations: string | null;
-  extraction_required: boolean | null;
-  notes: string | null;
-  uploaded_at: string | null;
-};
+import React, { useState, useEffect } from "react";
 
 export default function Requirements() {
-  const [includeExtraction, setIncludeExtraction] = useState(false);
-  const [rows, setRows] = useState<Requirement[] | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [requirements, setRequirements] = useState([]);
+  const [form, setForm] = useState({
+    name: "",
+    sector: "",
+    preferred_locations: "",
+    size_sqm: "",
+    notes: "",
+  });
+  const [showModal, setShowModal] = useState(false);
 
-  const filtered = useMemo(() => {
-    if (!rows) return [];
-    if (!includeExtraction) return rows;
-    return rows.filter(r => r.extraction_required === true);
-  }, [rows, includeExtraction]);
+  const API_URL = "https://acquire-intel-api.onrender.com/api/operatorRequirements";
 
-  async function load() {
-    try {
-      setLoading(true);
-      const res = await fetch("https://acquire-intel-api.onrender.com/api/operator-requirements");
-      if (!res.ok) throw new Error(String(res.status));
-      const data = (await res.json()) as Requirement[];
-      setRows(
-        data.sort((a, b) => (b.uploaded_at || "").localeCompare(a.uploaded_at || ""))
-      );
-    } catch (err) {
-      console.error("Failed to load requirements", err);
-      setRows([]);
-    } finally {
-      setLoading(false);
-    }
-  }
+  // Fetch requirements
+  const loadRequirements = async () => {
+    const res = await fetch(API_URL);
+    const data = await res.json();
+    if (data.ok) setRequirements(data.items);
+  };
 
   useEffect(() => {
-    load();
+    loadRequirements();
   }, []);
 
+  // Handle form change
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm({ ...form, [name]: value });
+  };
+
+  // Submit new requirement
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const payload = {
+      name: form.name,
+      sector: form.sector,
+      preferred_locations: form.preferred_locations.split(",").map((l) => l.trim()),
+      size_sqm: form.size_sqm,
+      notes: form.notes,
+    };
+
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+    if (data.ok) {
+      setShowModal(false);
+      setForm({ name: "", sector: "", preferred_locations: "", size_sqm: "", notes: "" });
+      loadRequirements();
+    } else {
+      alert("Error: " + data.error);
+    }
+  };
+
   return (
-    <div className="p-6">
-      <div className="rounded-xl border border-[#0e2e2e] bg-[#071922]/70 shadow-[0_0_40px_rgba(0,255,200,0.08)]">
-        <div className="px-6 pt-6">
-          <h1 className="text-4xl font-extrabold tracking-tight text-teal-300 drop-shadow-[0_0_12px_rgba(0,255,200,0.35)]">
-            Operator Requirements
-          </h1>
-          <p className="mt-3 text-[15px] text-teal-100/70">
-            Match operator requirements to property opportunities.
-          </p>
-        </div>
+    <div className="p-6 text-white">
+      <h2 className="text-2xl font-bold mb-4">Operator Requirements</h2>
 
-        <div className="px-6 pt-6">
-          <label className="inline-flex items-center gap-3 text-teal-100/85">
-            <input
-              type="checkbox"
-              checked={includeExtraction}
-              onChange={(e) => setIncludeExtraction(e.target.checked)}
-            />
-            <span>Include requirements needing extraction</span>
-          </label>
+      <button
+        onClick={() => setShowModal(true)}
+        className="bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded-lg mb-4"
+      >
+        ➕ Add Requirement
+      </button>
 
-          <button
-            onClick={load}
-            disabled={loading}
-            className="ml-6 inline-block w-[420px] rounded-lg px-5 py-3 text-center font-semibold transition
-                       bg-[#34f5d1] text-[#07222a] disabled:opacity-60"
+      <ul className="space-y-2">
+        {requirements.map((r) => (
+          <li key={r.id} className="border border-gray-700 rounded-lg p-3">
+            <p><strong>{r.name}</strong> ({r.sector})</p>
+            <p>📍 {r.preferredlocations?.join(", ") || "N/A"}</p>
+            <p>📏 Size: {r.size_sqm || "N/A"}</p>
+            <p>📝 {r.notes || "No notes"}</p>
+          </li>
+        ))}
+      </ul>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center">
+          <form
+            onSubmit={handleSubmit}
+            className="bg-gray-900 p-6 rounded-xl shadow-xl w-96 space-y-4"
           >
-            {loading ? "Loading…" : "Match Operators"}
-          </button>
-        </div>
+            <h3 className="text-xl font-semibold mb-2">Add Requirement</h3>
 
-        <div className="px-6 py-6 overflow-x-auto">
-          {!rows && <div className="py-10 text-teal-100/70">Loading…</div>}
-          {rows && filtered.length === 0 && (
-            <div className="py-10 text-teal-100/70">No matches found.</div>
-          )}
-          {rows && filtered.length > 0 && (
-            <table className="min-w-full text-sm">
-              <thead className="text-teal-200/80">
-                <tr className="border-b border-[#0f2d2d]">
-                  <th className="py-2 pr-4 text-left">Operator</th>
-                  <th className="py-2 pr-4 text-left">Size (sqft)</th>
-                  <th className="py-2 pr-4 text-left">Locations</th>
-                  <th className="py-2 pr-4 text-left">Extraction?</th>
-                  <th className="py-2 pr-4 text-left">Notes</th>
-                  <th className="py-2 pr-4 text-left">Uploaded</th>
-                </tr>
-              </thead>
-              <tbody className="text-teal-100/80">
-                {filtered.map(r => (
-                  <tr key={r.id} className="border-b border-[#0b2424]">
-                    <td className="py-2 pr-4">{r.operator_name}</td>
-                    <td className="py-2 pr-4">
-                      {r.min_size_sqft ?? "—"} – {r.max_size_sqft ?? "—"}
-                    </td>
-                    <td className="py-2 pr-4">{r.preferred_locations ?? "—"}</td>
-                    <td className="py-2 pr-4">{r.extraction_required ? "Yes" : "No"}</td>
-                    <td className="py-2 pr-4">{r.notes ?? "—"}</td>
-                    <td className="py-2 pr-4">
-                      {r.uploaded_at ? new Date(r.uploaded_at).toLocaleString() : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+            <input
+              name="name"
+              value={form.name}
+              onChange={handleChange}
+              placeholder="Name"
+              className="w-full p-2 rounded bg-gray-800"
+              required
+            />
+            <input
+              name="sector"
+              value={form.sector}
+              onChange={handleChange}
+              placeholder="Sector"
+              className="w-full p-2 rounded bg-gray-800"
+              required
+            />
+            <input
+              name="preferred_locations"
+              value={form.preferred_locations}
+              onChange={handleChange}
+              placeholder="Preferred Locations (comma separated)"
+              className="w-full p-2 rounded bg-gray-800"
+            />
+            <input
+              name="size_sqm"
+              value={form.size_sqm}
+              onChange={handleChange}
+              placeholder="Size (sqm)"
+              className="w-full p-2 rounded bg-gray-800"
+            />
+            <textarea
+              name="notes"
+              value={form.notes}
+              onChange={handleChange}
+              placeholder="Notes"
+              className="w-full p-2 rounded bg-gray-800"
+            />
+            <div className="flex justify-between">
+              <button
+                type="submit"
+                className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded-lg"
+              >
+                Add Requirement
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                className="bg-gray-700 px-4 py-2 rounded-lg"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
         </div>
-      </div>
+      )}
     </div>
   );
 }
