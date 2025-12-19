@@ -1,5 +1,6 @@
 // src/views/RequirementsView.tsx
 import React, { useCallback, useEffect, useState } from "react";
+import CONFIG from "../config"; // ✅ Connects to backend API
 
 type Requirement = {
   id: string;
@@ -10,11 +11,7 @@ type Requirement = {
   notes?: string;
 };
 
-const API_BASE =
-  (import.meta as any).env?.VITE_API_URL ||
-  (import.meta as any).env?.VITE_API_BASE ||
-  (import.meta as any).env?.VITE_API_BASE_URL ||
-  "https://acquire-intel-api.onrender.com";
+const API_BASE = CONFIG.API_BASE_URL; // ✅ Clean base URL
 
 const panel: React.CSSProperties = {
   background: "linear-gradient(180deg, rgba(7,20,24,0.98), rgba(7,20,24,0.92))",
@@ -65,13 +62,12 @@ export default function RequirementsView(): JSX.Element {
   const fetchList = useCallback(async () => {
     try {
       setStatus("loading…");
-      const res = await fetch(`${API_BASE}/api/operatorRequirements/manual`);
+      const res = await fetch(`${API_BASE}/operatorRequirements/manual`);
       if (!res.ok) {
         setStatus(`HTTP ${res.status}`);
         return;
       }
       const j = await res.json();
-      // Backend returns { ok, count, items }
       if (j?.ok && Array.isArray(j.items)) {
         setItems(j.items as Requirement[]);
         setStatus("ok");
@@ -95,8 +91,7 @@ export default function RequirementsView(): JSX.Element {
     }
     setSaving(true);
     try {
-      // Backend expects: { name, operatorId, preferredLocations (string), notes }
-      const res = await fetch(`${API_BASE}/api/operatorRequirements/manual`, {
+      const res = await fetch(`${API_BASE}/operatorRequirements/manual`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -115,7 +110,7 @@ export default function RequirementsView(): JSX.Element {
         alert(`Save failed (HTTP ${res.status})${msg ? ` — ${msg}` : ""}`);
         return;
       }
-      const j = await res.json(); // { ok:true, item }
+      const j = await res.json();
       if (j?.ok) {
         setOperatorId("");
         setName("");
